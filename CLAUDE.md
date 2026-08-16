@@ -126,6 +126,11 @@ Built for a 9-year-old on a phone, outdoors:
   identified by colour alone** — every coloured dot sits beside a written label.
 - The Progress chart is one measure across six named categories, so it uses
   **one colour, not six**. Do not rainbow it.
+- **Anything that scrolls sideways must be a shortcut, never the only door.**
+  The drill filter strip on All drills scrolls horizontally, which a nine-year-old
+  will not go hunting for; it is only allowed because that list is also grouped
+  under skill headings, so every skill is reachable by scrolling down. Do not
+  remove the headings and keep the strip.
 - Bold and sporty, not cutesy.
 
 ## Offline

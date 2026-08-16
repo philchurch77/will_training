@@ -20,6 +20,30 @@
     });
   }
 
+  // --- skill filter strip ------------------------------------------------
+  // The strip scrolls sideways and the lit chip is what tells him which filter
+  // he is on. Tapping a chip at the far end loads a page whose strip has
+  // scrolled back to the left, hiding the very confirmation he needs, so nudge
+  // it back into view. Minimum nudge only, so the leading chips stay put where
+  // they can. The 36 clears the fade on the right edge.
+  var strip = document.querySelector('.chips');
+  if (strip) {
+    var lit = strip.querySelector('.chip.is-on');
+    if (lit) {
+      var overshoot = lit.offsetLeft + lit.offsetWidth - strip.clientWidth + 36;
+      if (overshoot > 0) { strip.scrollLeft = overshoot; }
+    }
+    // 2px of slack: scrollLeft goes fractional on a zoomed phone and an exact
+    // comparison then never reports the end.
+    var paintMore = function () {
+      var more = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 2;
+      strip.classList.toggle('has-more', more);
+    };
+    strip.addEventListener('scroll', paintMore, { passive: true });
+    window.addEventListener('resize', paintMore);
+    paintMore();
+  }
+
   // --- connection banner -------------------------------------------------
   function paintConnection() {
     document.body.classList.toggle('is-offline', !navigator.onLine);

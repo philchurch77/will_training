@@ -308,25 +308,70 @@ a { color: var(--accent); }
 .newbadge .badge-em { font-size: 52px; }
 
 /* --- library ---------------------------------------------------------- */
-/* These WRAP rather than scroll sideways. A horizontal scroller hid four of
-   the six skills on a 320px phone with no obvious cue, and a nine-year-old
-   will not go hunting for a sideways swipe - he will decide those skills do
-   not exist. Every filter is on screen at once. */
+/* One flat row that scrolls sideways. This was a wrapping two-row grid of
+   raised chips, which read as heavily as the drill rows underneath and pushed
+   the first drill a fifth of the way down the screen.
+   The old note here warned that a nine-year-old will not go hunting for a
+   sideways swipe and will decide the off-screen skills do not exist. That is
+   still true, which is why the unfiltered list below is grouped under skill
+   headings: every skill is reachable by scrolling down, the way he already
+   scrolls. The strip is a shortcut, never the only door.
+   The right-hand fade and the deliberately part-cut last chip are the cue
+   that there is more sideways. */
 .chips {
-  display: flex; flex-wrap: wrap; gap: 8px;
-  padding: 4px 0 12px;
+  display: flex; gap: 6px;
+  overflow-x: auto; overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  /* Full-bleed so the strip runs to both screen edges - a chip cut off by the
+     page gutter looks broken, one cut off by the screen looks scrollable. */
+  margin: 0 calc(var(--pad) * -1) 4px;
+  padding: 2px var(--pad) 10px;
+}
+.chips::-webkit-scrollbar { display: none; }
+/* app.js hangs this on while the strip still has somewhere to go. Fading
+   unconditionally ghosted the last chip once he had scrolled to the end -
+   including the lit one, which is the only thing telling him what he picked. */
+.chips.has-more {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 34px), transparent);
 }
 .chip {
-  flex: 0 1 auto; min-height: 56px; padding: 10px 16px;
+  flex: 0 0 auto; scroll-snap-align: start;
+  position: relative;
+  min-height: 40px; padding: 0 14px;
   border-radius: 999px;
-  background: var(--surface); border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  color: var(--ink); text-decoration: none; font-weight: 700; font-size: 15px;
-  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--surface-2); border: 1px solid transparent;
+  color: var(--ink-2); text-decoration: none; font-weight: 700; font-size: 14px;
+  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
 }
+/* 40px to look at, 44px to hit: the strip stays light without shrinking the
+   tap target, same trick the rest of the app uses. */
+.chip::after { content: ''; position: absolute; inset: -2px 0; }
 .chip.is-on {
-  border-color: var(--accent); background: var(--accent-soft);
-  box-shadow: none;
+  background: var(--accent); border-color: var(--accent);
+  color: #fff;
+}
+.chip.is-on .pill-dot { box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+
+/* Skill headings on the unfiltered list. Sticky so he always knows which
+   skill he is looking at 39 drills deep. */
+.drill-group {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+  margin: 18px 0 6px;
+  padding: 6px 2px;
+  background: var(--bg);
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--ink-3);
+}
+.drill-list > .drill-group:first-child { margin-top: 2px; }
+.drill-group-name { flex: 1 1 auto; }
+.drill-group-count {
+  font-size: 12px; font-weight: 700; letter-spacing: 0;
+  color: var(--ink-3);
 }
 
 /* --- tab bar ---------------------------------------------------------- */

@@ -3,35 +3,52 @@
 {% block heading %}All drills{% endblock %}
 
 {% block content %}
-<div class="chips">
+{# One flat row that scrolls sideways. Deliberately lighter than the drill #}
+{# rows below: these are a filter, not the content. #}
+<div class="chips" role="navigation" aria-label="Filter by skill">
   <a href="{% url 'training:library' %}"
-     class="chip {% if not selected %}is-on{% endif %}">All</a>
+     class="chip {% if not selected %}is-on{% endif %}"
+     {% if not selected %}aria-current="page"{% endif %}>All</a>
   {% for s in skills %}
     <a href="{% url 'training:library_skill' s.slug %}"
-       class="chip {% if selected == s %}is-on{% endif %}">
+       class="chip {% if selected == s %}is-on{% endif %}"
+       {% if selected == s %}aria-current="page"{% endif %}>
       <span class="pill-dot" style="background:{{ s.colour }}"></span>{{ s.name }}
     </a>
   {% endfor %}
 </div>
 
+{# Drills already come back ordered by skill, so regroup needs no view work. #}
+{% regroup drills by skill as skill_groups %}
 <ul class="drill-list">
-  {% for drill in drills %}
-    <li>
-      <a class="drill-row" href="{% url 'training:drill' drill.slug %}">
-        <span class="tick" aria-hidden="true" style="border-color:{{ drill.skill.colour }}"></span>
-        <span class="drill-main">
-          <span class="drill-name">{{ drill.name }}</span>
-          <span class="drill-meta">
-            <span>{{ drill.target_label }}</span>
-            <span class="kit" aria-hidden="true">
-              {% for emoji, label in drill.equipment %}{{ emoji }}{% endfor %}
+  {% for group in skill_groups %}
+    {# Only worth a heading on the unfiltered list - with a filter on, the #}
+    {# lit chip above already says which skill this is. #}
+    {% if not selected %}
+      <li class="drill-group">
+        <span class="pill-dot" style="background:{{ group.grouper.colour }}"></span>
+        <span class="drill-group-name">{{ group.grouper.name }}</span>
+        <span class="drill-group-count">{{ group.list|length }}</span>
+      </li>
+    {% endif %}
+    {% for drill in group.list %}
+      <li>
+        <a class="drill-row" href="{% url 'training:drill' drill.slug %}">
+          <span class="tick" aria-hidden="true" style="border-color:{{ drill.skill.colour }}"></span>
+          <span class="drill-main">
+            <span class="drill-name">{{ drill.name }}</span>
+            <span class="drill-meta">
+              <span>{{ drill.target_label }}</span>
+              <span class="kit" aria-hidden="true">
+                {% for emoji, label in drill.equipment %}{{ emoji }}{% endfor %}
+              </span>
+              {% if drill.weak_foot %}<span>weak foot</span>{% endif %}
             </span>
-            {% if drill.weak_foot %}<span>weak foot</span>{% endif %}
           </span>
-        </span>
-        <span class="chev" aria-hidden="true">&rsaquo;</span>
-      </a>
-    </li>
+          <span class="chev" aria-hidden="true">&rsaquo;</span>
+        </a>
+      </li>
+    {% endfor %}
   {% empty %}
     <li class="card"><p class="muted">No drills yet.</p></li>
   {% endfor %}

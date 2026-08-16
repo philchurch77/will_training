@@ -171,6 +171,25 @@ class TestDrillAndLibrary:
         assert "Pick your corner" in names
         assert "Toe taps" not in names  # that one is ball mastery
 
+    def test_the_unfiltered_library_groups_drills_under_skill_headings(
+        self, client, will, seeded
+    ):
+        # The headings are what make the filter strip optional: every skill is
+        # reachable by scrolling, so nothing is lost if he never swipes it.
+        client.force_login(will)
+        body = client.get(reverse("training:library")).content.decode()
+        for skill in Skill.objects.all():
+            assert skill.name in body
+        assert body.count('class="drill-group"') == Skill.objects.count()
+
+    def test_a_filtered_library_drops_the_headings(self, client, will, seeded):
+        # The lit chip already names the skill; a heading would repeat it.
+        client.force_login(will)
+        body = client.get(
+            reverse("training:library_skill", args=["shooting"])
+        ).content.decode()
+        assert 'class="drill-group"' not in body
+
     def test_a_missing_drill_is_a_404(self, client, will):
         client.force_login(will)
         assert client.get(reverse("training:drill", args=["nope"])).status_code == 404
