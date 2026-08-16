@@ -1,0 +1,15 @@
+{% extends "training/base.html" %}
+{% block title %}No signal{% endblock %}
+{% block heading %}No signal{% endblock %}
+
+{% block content %}
+<div class="card center">
+  <p style="font-size:52px;margin:0">&#128246;</p>
+  <h2>You're offline</h2>
+  <p class="muted">
+    This page hasn't been saved to your phone yet. Your session and the drill
+    list still work - go back and try again.
+  </p>
+  <a class="btn mt" href="{% url 'training:today' %}">Back to today</a>
+</div>
+{% endblock %}

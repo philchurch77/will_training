@@ -1,0 +1,7 @@
+# Local prod smoke test output
+*.py[cod]
+.pytest_cache/
+.venv/
+__pycache__/
+db.sqlite3
+staticfiles/

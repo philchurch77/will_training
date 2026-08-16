@@ -1,0 +1,39 @@
+{% extends "training/base.html" %}
+{% block title %}Drills{% endblock %}
+{% block heading %}All drills{% endblock %}
+
+{% block content %}
+<div class="chips">
+  <a href="{% url 'training:library' %}"
+     class="chip {% if not selected %}is-on{% endif %}">All</a>
+  {% for s in skills %}
+    <a href="{% url 'training:library_skill' s.slug %}"
+       class="chip {% if selected == s %}is-on{% endif %}">
+      <span class="pill-dot" style="background:{{ s.colour }}"></span>{{ s.name }}
+    </a>
+  {% endfor %}
+</div>
+
+<ul class="drill-list">
+  {% for drill in drills %}
+    <li>
+      <a class="drill-row" href="{% url 'training:drill' drill.slug %}">
+        <span class="tick" aria-hidden="true" style="border-color:{{ drill.skill.colour }}"></span>
+        <span class="drill-main">
+          <span class="drill-name">{{ drill.name }}</span>
+          <span class="drill-meta">
+            <span>{{ drill.target_label }}</span>
+            <span class="kit" aria-hidden="true">
+              {% for emoji, label in drill.equipment %}{{ emoji }}{% endfor %}
+            </span>
+            {% if drill.weak_foot %}<span>weak foot</span>{% endif %}
+          </span>
+        </span>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
+      </a>
+    </li>
+  {% empty %}
+    <li class="card"><p class="muted">No drills yet.</p></li>
+  {% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "training/base.html" %}
+{% block title %}Coach - drills{% endblock %}
+{% block heading %}Drills{% endblock %}
+{% block body_class %}coach{% endblock %}
+
+{% block content %}
+<h1>All drills ({{ drills|length }})</h1>
+<a class="btn mt" href="{% url 'training:coach_drill_new' %}">+ Add a drill</a>
+
+<div class="table-wrap mt">
+<table>
+  <tr><th>Drill</th><th>Skill</th><th>Target</th><th></th></tr>
+  {% for d in drills %}
+    <tr>
+      <td>
+        {{ d.name }}
+        {% if not d.is_active %}<span class="muted">(hidden)</span>{% endif %}
+        {% if d.weak_foot %} &middot; <span class="muted">weak foot</span>{% endif %}
+      </td>
+      <td class="muted">{{ d.skill.name }}</td>
+      <td class="muted">{{ d.target_label }}</td>
+      <td><a href="{% url 'training:coach_drill_edit' d.slug %}">Edit</a></td>
+    </tr>
+  {% endfor %}
+</table>
+</div>
+
+<p class="center mt">
+  <a class="linkbtn" href="{% url 'training:coach_plan' %}">&larr; Back to the week</a>
+</p>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "training/base.html" %}
+{% load static %}
+{% block title %}{{ drill.name }}{% endblock %}
+{% block heading %}{{ drill.skill.name }}{% endblock %}
+
+{% block content %}
+<div class="offline-note">No signal - your ticks are saved and will sync later.</div>
+
+<div class="card">
+  <h1>{{ drill.name }}</h1>
+  <p>
+    <span class="pill pill-skill">
+      <span class="pill-dot" style="background:{{ drill.skill.colour }}"></span>
+      {{ drill.skill.name }}
+    </span>
+    {% if drill.weak_foot %}<span class="pill">Weak foot</span>{% endif %}
+    {% for emoji, label in drill.equipment %}
+      <span class="pill">{{ emoji }} {{ label }}</span>
+    {% endfor %}
+  </p>
+
+  <p class="instructions">{{ drill.instructions|linebreaksbr }}</p>
+
+  <div class="cue">
+    <span aria-hidden="true">&#128161;</span>
+    <span>{{ drill.cue }}</span>
+  </div>
+</div>
+
+<div class="card">
+  {% if drill.is_timed %}
+    <div class="clock" id="clock" data-seconds="{{ drill.duration_minutes }}">
+      {{ drill.duration_minutes }}:00
+    </div>
+    <p class="center muted" id="clocknote">Tap start when you're ready</p>
+    <div class="btn-row">
+      <button class="btn" id="startstop" type="button">Start</button>
+      <button class="btn btn-quiet" id="reset" type="button">Reset</button>
+    </div>
+  {% else %}
+    <p class="count-target">Target: {{ drill.target_reps }}</p>
+    <div class="counter">
+      <button class="count-btn" id="minus" type="button" aria-label="One less">&minus;</button>
+      <div class="count-val" id="count" data-target="{{ drill.target_reps }}">0</div>
+      <button class="count-btn" id="plus" type="button" aria-label="One more">+</button>
+    </div>
+  {% endif %}
+</div>
+
+<form method="post" action="{% url 'training:drill_complete' drill.slug %}" id="doneform"
+      data-slug="{{ drill.slug }}">
+  {% csrf_token %}
+  <input type="hidden" name="actual_minutes" id="actual_minutes" value="">
+  <input type="hidden" name="actual_reps" id="actual_reps" value="">
+  <input type="hidden" name="rating" id="rating" value="">
+  <input type="hidden" name="date" id="date" value="{% now 'Y-m-d' %}">
+
+  <div class="card">
+    <h3>How did that feel?</h3>
+    <div class="rating" role="group" aria-label="How did that feel?">
+      <button type="button" class="rate" data-rate="1" aria-pressed="false"
+              aria-label="Really hard">&#128555;</button>
+      <button type="button" class="rate" data-rate="2" aria-pressed="false"
+              aria-label="Hard">&#128533;</button>
+      <button type="button" class="rate" data-rate="3" aria-pressed="false"
+              aria-label="OK">&#128528;</button>
+      <button type="button" class="rate" data-rate="4" aria-pressed="false"
+              aria-label="Good">&#128522;</button>
+      <button type="button" class="rate" data-rate="5" aria-pressed="false"
+              aria-label="Easy">&#128526;</button>
+    </div>
+    <p class="muted center" style="font-size:14px;margin:10px 0 0">You can skip this</p>
+  </div>
+
+  <button type="submit" class="btn" id="finish">
+    {% if already_done %}Done again &#10003;{% else %}I've finished this &#10003;{% endif %}
+  </button>
+</form>
+
+{% if already_done %}
+  <form method="post" action="{% url 'training:drill_uncomplete' drill.slug %}" class="mt">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-quiet">Untick this one</button>
+  </form>
+{% endif %}
+
+<p class="center mt">
+  <a href="{% url 'training:today' %}" class="linkbtn">&larr; Back to today</a>
+</p>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'training/js/timer.js' %}" defer></script>
+{% endblock %}

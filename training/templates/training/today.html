@@ -1,0 +1,103 @@
+{% extends "training/base.html" %}
+{% block title %}Today{% endblock %}
+{% block heading %}Today{% endblock %}
+
+{% block content %}
+
+<div class="offline-note">No signal - your ticks are saved and will sync later.</div>
+
+{% for b in new_badges %}
+  <div class="card newbadge">
+    <div class="badge-em">{{ b.emoji }}</div>
+    <h2>New badge: {{ b.name }}</h2>
+    <p class="hero-sub">{{ b.description }}</p>
+  </div>
+{% endfor %}
+
+{% if not summary or not summary.plan_day %}
+  <div class="card">
+    <h2>No plan yet</h2>
+    <p class="muted">Ask your coach to set up this week's plan.</p>
+  </div>
+
+{% elif summary.plan_day.is_rest %}
+  <div class="card card-hero">
+    <div class="hero-kicker">{{ today|date:"l" }}</div>
+    <h1 class="hero-big">Rest day</h1>
+    <p class="hero-sub">{{ summary.plan_day.label }}</p>
+  </div>
+  <div class="card center">
+    <p style="font-size:52px;margin:0">&#128564;</p>
+    <p class="muted">Resting is training too. Your streak is safe.</p>
+    <a class="btn btn-quiet mt" href="{% url 'training:library' %}">Just fancy a kickabout?</a>
+  </div>
+
+{% else %}
+  <div class="card card-hero">
+    <div class="hero-kicker">
+      {{ today|date:"l" }}
+      {% if summary.plan_day.is_optional %}&middot; bonus{% endif %}
+    </div>
+    <h1 class="hero-big">
+      {% if summary.all_done %}Session done!{% else %}{{ summary.planned_minutes }} minutes{% endif %}
+    </h1>
+    <p class="hero-sub">
+      {{ summary.plan_day.label }}
+      &middot; {{ summary.done_count }}/{{ summary.total_count }} done
+      {% if streak %}&middot; {{ streak }} day streak &#128293;{% endif %}
+    </p>
+  </div>
+
+  {% if summary.plan_day.is_optional %}
+    <div class="card">
+      <span class="pill pill-optional">Bonus session</span>
+      <p class="muted" style="margin-top:10px;margin-bottom:0">
+        You've got academy or a match today. Only do this if you feel fresh -
+        skipping it will not break your streak.
+      </p>
+    </div>
+  {% endif %}
+
+  <ul class="drill-list">
+    {% for row in summary.rows %}
+      <li>
+        <a class="drill-row {% if row.done %}is-done{% endif %}
+                  {% if just_done == row.drill.slug %}just-done{% endif %}"
+           href="{% url 'training:drill' row.drill.slug %}">
+          <span class="tick" aria-hidden="true">&#10003;</span>
+          <span class="drill-main">
+            <span class="drill-name">{{ row.drill.name }}</span>
+            <span class="drill-meta">
+              <span>{{ row.drill.target_label }}</span>
+              <span class="kit" aria-hidden="true">
+                {% for emoji, label in row.drill.equipment %}{{ emoji }}{% endfor %}
+              </span>
+              {% if row.drill.weak_foot %}<span>weak foot</span>{% endif %}
+            </span>
+          </span>
+          <span class="chev" aria-hidden="true">&rsaquo;</span>
+        </a>
+      </li>
+    {% endfor %}
+  </ul>
+
+  {% if summary.all_done %}
+    <div class="card center">
+      <p style="font-size:52px;margin:0">&#127881;</p>
+      <h2>Everything ticked off</h2>
+      <p class="muted">Great session. See you tomorrow.</p>
+      <a class="btn mt" href="{% url 'training:progress' %}">See my progress</a>
+    </div>
+  {% endif %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Nudge the just-completed row into view so the animation is actually seen.
+  var hit = document.querySelector('.just-done');
+  if (hit && hit.scrollIntoView) {
+    hit.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+</script>
+{% endblock %}

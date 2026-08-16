@@ -1,0 +1,40 @@
+# Render blueprint for Will's Training.
+#
+# Deploy with: push this repo to GitHub, then in Render choose
+# New -> Blueprint and point it at the repo. Render reads this file.
+#
+# IMPORTANT: the database is SQLite on a persistent disk. Render's normal
+# filesystem is wiped on every deploy and restart, so without the disk below
+# Will would lose his streak and his whole history each time you push.
+# Persistent disks need a paid instance type - see the README.
+
+services:
+  - type: web
+    name: will-training
+    runtime: python
+    plan: starter          # a disk cannot be attached to the free plan
+    region: frankfurt      # closest to the UK; oregon/ohio also available
+    branch: main
+    buildCommand: "./build.sh"
+    # One worker on purpose: two users, and the login throttle keeps its
+    # counters in local memory, which only works within a single process.
+    startCommand: "gunicorn config.wsgi:application --workers 1 --threads 4 --timeout 60"
+    healthCheckPath: /login/
+
+    disk:
+      name: will-data
+      mountPath: /var/data
+      sizeGB: 1
+
+    envVars:
+      - key: WILL_DEBUG
+        value: "0"
+      - key: WILL_SECRET_KEY
+        generateValue: true      # Render generates and stores it for you
+      - key: WILL_DB_PATH
+        value: /var/data/db.sqlite3
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      # WILL_HOSTS is not needed: settings.py picks up
+      # RENDER_EXTERNAL_HOSTNAME automatically. Set it only if you add a
+      # custom domain, as a comma-separated list.

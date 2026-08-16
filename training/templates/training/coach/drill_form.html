@@ -1,0 +1,21 @@
+{% extends "training/base.html" %}
+{% block title %}Coach - edit drill{% endblock %}
+{% block heading %}{% if drill %}Edit drill{% else %}New drill{% endif %}{% endblock %}
+{% block body_class %}coach{% endblock %}
+
+{% block content %}
+<h1>{% if drill %}{{ drill.name }}{% else %}New drill{% endif %}</h1>
+
+<div class="card">
+  <form method="post">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {{ form.as_p }}
+    <button type="submit" class="btn mt">Save</button>
+  </form>
+</div>
+
+<p class="center mt">
+  <a class="linkbtn" href="{% url 'training:coach_drills' %}">&larr; Back to drills</a>
+</p>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "training/base.html" %}
+{% block title %}Coach - {{ day.get_weekday_display }}{% endblock %}
+{% block heading %}{{ day.get_weekday_display }}{% endblock %}
+{% block body_class %}coach{% endblock %}
+
+{% block content %}
+<h1>{{ day.get_weekday_display }}</h1>
+<p class="muted">
+  Planned: {{ planned_minutes }} min of drills &middot; target {{ day.target_minutes }} min
+</p>
+
+<div class="card">
+  <h3>Day settings</h3>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="settings">
+    {{ form.as_p }}
+    <button type="submit" class="btn mt">Save</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Drills in order</h3>
+  {% if not items %}
+    <p class="muted">Nothing here yet.</p>
+  {% endif %}
+  <table>
+    {% for item in items %}
+      <tr>
+        <td style="width:1%">
+          <form method="post" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="up">
+            <input type="hidden" name="item" value="{{ item.pk }}">
+            <button class="sbtn" type="submit" aria-label="Move up">&uarr;</button>
+          </form>
+          <form method="post" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="down">
+            <input type="hidden" name="item" value="{{ item.pk }}">
+            <button class="sbtn" type="submit" aria-label="Move down">&darr;</button>
+          </form>
+        </td>
+        <td>
+          <strong>{{ item.drill.name }}</strong><br>
+          <span class="muted" style="font-size:13px">
+            {{ item.drill.skill.name }} &middot; {{ item.drill.target_label }}
+            {% if item.drill.weak_foot %} &middot; weak foot{% endif %}
+            {% if item.drill.is_fun %} &middot; finisher{% endif %}
+          </span>
+        </td>
+        <td style="width:1%">
+          <form method="post" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="item" value="{{ item.pk }}">
+            <button class="sbtn" type="submit" aria-label="Remove">&times;</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <h3>Add a drill</h3>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="add">
+    <label for="drillpick">Drill</label>
+    <select name="drill" id="drillpick">
+      {% for skill in skills %}
+        <optgroup label="{{ skill.name }}">
+          {% for d in skill.drills.all %}
+            {% if d.is_active %}
+              <option value="{{ d.pk }}">{{ d.name }} ({{ d.target_label }})</option>
+            {% endif %}
+          {% endfor %}
+        </optgroup>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn mt">Add to {{ day.get_weekday_display }}</button>
+  </form>
+</div>
+
+<p class="center mt">
+  <a class="linkbtn" href="{% url 'training:coach_plan' %}">&larr; Back to the week</a>
+</p>
+{% endblock %}

@@ -1,0 +1,67 @@
+{% extends "training/base.html" %}
+{% block title %}Progress{% endblock %}
+{% block heading %}Progress{% endblock %}
+
+{% block content %}
+
+<div class="card card-hero">
+  <div class="hero-kicker">Current streak</div>
+  <h1 class="hero-big">{{ streak }} day{{ streak|pluralize }} &#128293;</h1>
+  <p class="hero-sub">Your best ever is {{ longest }}.</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-num">{{ month_sessions }}</div>
+    <div class="stat-lab">Sessions this month</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">{{ total_drills }}</div>
+    <div class="stat-lab">Drills done ever</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">{{ total_minutes }}</div>
+    <div class="stat-lab">Minutes trained</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">{{ longest }}</div>
+    <div class="stat-lab">Best streak</div>
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>Minutes on each skill</h2>
+  <p class="muted" style="font-size:15px">
+    The short bars are the ones you've been avoiding.
+  </p>
+  <div class="chart">
+    {% for row in skill_rows %}
+      <div class="bar-row">
+        <div class="bar-head">
+          <span class="bar-label">{{ row.skill.emoji }} {{ row.skill.name }}</span>
+          <span class="bar-value">{{ row.minutes }} min</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill {% if not row.minutes %}is-zero{% endif %}"
+               style="width: {% if row.percent %}{{ row.percent }}%{% else %}0{% endif %}"></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Badges</h2>
+  <div class="badge-grid">
+    {% for row in badge_rows %}
+      <div class="badge {% if not row.earned %}locked{% endif %}">
+        <div class="badge-em">{{ row.badge.emoji }}</div>
+        <div class="badge-nm">{{ row.badge.name }}</div>
+        <div class="muted" style="font-size:11px">
+          {% if row.earned %}{{ row.earned_on|date:"j M" }}{% else %}{{ row.value }}/{{ row.badge.threshold }}{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

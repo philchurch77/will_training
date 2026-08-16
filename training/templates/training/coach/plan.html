@@ -1,0 +1,45 @@
+{% extends "training/base.html" %}
+{% block title %}Coach - weekly plan{% endblock %}
+{% block heading %}Coach{% endblock %}
+{% block body_class %}coach{% endblock %}
+
+{% block content %}
+{% if not plan %}
+  <div class="card">
+    <h2>No active plan</h2>
+    <p class="muted">Run <code>manage.py seed_drills</code> to create the starter plan.</p>
+  </div>
+{% else %}
+  <h1>{{ plan.name }}</h1>
+  <p class="muted">Tap a day to change its drills, order or target time.</p>
+
+  {% for day in days %}
+    <a class="day-link" href="{% url 'training:coach_plan_day' day.weekday %}">
+      <span>
+        <span class="day-name">{{ day.get_weekday_display }}</span>
+        <span class="day-sub">
+          {{ day.label }}
+          {% if day.is_rest %} &middot; rest
+          {% else %} &middot; {{ day.items.count }} drill{{ day.items.count|pluralize }}
+            &middot; {{ day.target_minutes }} min{% endif %}
+        </span>
+      </span>
+      <span>
+        {% if day.is_rest %}<span class="pill pill-rest">Rest</span>
+        {% elif day.is_optional %}<span class="pill pill-optional">Optional</span>{% endif %}
+        <span class="chev">&rsaquo;</span>
+      </span>
+    </a>
+  {% endfor %}
+
+  <div class="btn-row mt">
+    <a class="btn btn-quiet" href="{% url 'training:coach_drills' %}">All drills</a>
+    <a class="btn btn-quiet" href="{% url 'training:coach_logs' %}">His sessions</a>
+  </div>
+{% endif %}
+
+<form method="post" action="{% url 'training:logout' %}" class="center mt">
+  {% csrf_token %}
+  <button type="submit" class="linkbtn">Sign out</button>
+</form>
+{% endblock %}

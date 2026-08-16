@@ -1,0 +1,82 @@
+{% load static %}<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f6f8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+{# The home-screen label. Without it iOS uses the <title>, which is too long. #}
+<meta name="apple-mobile-web-app-title" content="Training">
+<meta name="application-name" content="Training">
+<title>{% block title %}Will's Training{% endblock %}</title>
+<link rel="manifest" href="{% url 'manifest' %}">
+<link rel="icon" href="{% static 'training/img/icon.svg' %}" type="image/svg+xml">
+<link rel="icon" href="{% static 'training/img/icon-192.png' %}" sizes="192x192" type="image/png">
+{# iOS ignores the manifest entirely and only looks for this one. #}
+<link rel="apple-touch-icon" href="{% static 'training/img/apple-touch-icon.png' %}">
+<link rel="stylesheet" href="{% static 'training/css/app.css' %}">
+
+<body class="{% block body_class %}{% endblock %}">
+
+{% block chrome %}
+<header class="topbar">
+  <div class="topbar-in">
+    <span class="topbar-title">{% block heading %}{% endblock %}</span>
+    {% if user.is_authenticated %}
+      {# Revealed by app.js only when the browser offers an install. Never on #}
+      {# iOS. Small and quiet on purpose: Phil taps it once, ever. #}
+      <button type="button" class="installbtn" id="install-go"
+              aria-label="Add this app to the home screen" hidden>Install</button>
+    {% endif %}
+    {% if user.is_authenticated and not request.in_coach %}
+      {# Deliberately understated: this is Dad's door, not part of Will's app. #}
+      <a class="linkbtn" href="{% url 'training:coach_plan' %}">Coach</a>
+    {% endif %}
+  </div>
+</header>
+{% endblock %}
+
+<main class="wrap">
+  {% block content %}{% endblock %}
+</main>
+
+{% if user.is_authenticated %}
+<nav class="tabbar">
+  {# Drawn rather than typed: emoji render differently on every phone, and these #}
+  {# animate on whichever tab he is standing on. #}
+  <a href="{% url 'training:today' %}" class="tab {% if tab == 'today' %}is-on{% endif %}">
+    <span class="tab-ic" aria-hidden="true">
+      <svg class="ic ic-ball" viewBox="0 0 24 24" focusable="false">
+        <circle class="ic-ball-o" cx="12" cy="12" r="8.5"/>
+        <g class="ic-ball-in">
+          <path d="M12 7.5L16.28 10.61L14.65 15.64L9.35 15.64L7.72 10.61Z"/>
+          <path d="M12 7.5L12 5.25M16.28 10.61L18.42 9.91M14.65 15.64L15.97 17.46M9.35 15.64L8.03 17.46M7.72 10.61L5.58 9.91"/>
+        </g>
+      </svg>
+    </span><span>Today</span>
+  </a>
+  <a href="{% url 'training:progress' %}" class="tab {% if tab == 'progress' %}is-on{% endif %}">
+    <span class="tab-ic" aria-hidden="true">
+      <svg class="ic ic-bars" viewBox="0 0 24 24" focusable="false">
+        <rect class="ic-bar ic-bar1" x="3.5" y="13" width="4.6" height="7" rx="1.7"/>
+        <rect class="ic-bar ic-bar2" x="9.7" y="8.5" width="4.6" height="11.5" rx="1.7"/>
+        <rect class="ic-bar ic-bar3" x="15.9" y="4" width="4.6" height="16" rx="1.7"/>
+      </svg>
+    </span><span>Progress</span>
+  </a>
+  <a href="{% url 'training:library' %}" class="tab {% if tab == 'library' %}is-on{% endif %}">
+    <span class="tab-ic" aria-hidden="true">
+      <svg class="ic ic-cone" viewBox="0 0 24 24" focusable="false">
+        <g class="ic-cone-body">
+          <path d="M12 3.5L17.8 18.6H6.2Z"/>
+          <path class="ic-cone-band" d="M9.3 12.6h5.4"/>
+          <path class="ic-cone-base" d="M3.5 20.3h17"/>
+        </g>
+      </svg>
+    </span><span>Drills</span>
+  </a>
+</nav>
+{% endif %}
+
+<script src="{% static 'training/js/app.js' %}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
