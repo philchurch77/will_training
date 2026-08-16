@@ -168,7 +168,10 @@ that matter:
 
 Render, via `render.yaml` + `build.sh`. SQLite lives on a **persistent disk** at
 `/var/data`; without it Render wipes the database on every deploy and Will loses
-his streak. Regenerate `requirements.txt` from the lock after changing deps:
+his streak. The disk is mounted only at runtime, so `migrate` and
+`seed_drills` run from `startCommand`, not `build.sh` - during the build
+`/var/data` does not exist and sqlite fails with "unable to open database
+file". Regenerate `requirements.txt` from the lock after changing deps:
 
 ```bash
 uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
