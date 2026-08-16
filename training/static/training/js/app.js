@@ -20,35 +20,6 @@
     });
   }
 
-  // --- install prompt ----------------------------------------------------
-  // Chrome will only show an install prompt from inside a real tap, so the
-  // event is stashed and replayed when the button is pressed. Firing it early
-  // or twice throws, hence the null after use.
-  var deferredInstall = null;
-  var go = document.getElementById('install-go');
-
-  window.addEventListener('beforeinstallprompt', function (event) {
-    event.preventDefault();
-    deferredInstall = event;
-    if (go) { go.hidden = false; }
-  });
-
-  if (go) {
-    go.addEventListener('click', function () {
-      if (!deferredInstall) { return; }
-      var prompt = deferredInstall;
-      deferredInstall = null;
-      go.hidden = true;
-      prompt.prompt();
-    });
-  }
-
-  // Installed from somewhere else (the browser menu, or a second visit).
-  window.addEventListener('appinstalled', function () {
-    deferredInstall = null;
-    if (go) { go.hidden = true; }
-  });
-
   // --- connection banner -------------------------------------------------
   function paintConnection() {
     document.body.classList.toggle('is-offline', !navigator.onLine);

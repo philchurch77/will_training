@@ -9,7 +9,7 @@
 // Bump this whenever the CSS, JS or icon change - filenames are not
 // content-hashed, and static assets are served cache-first, so an old cache
 // would keep serving the previous stylesheet forever.
-const CACHE = 'will-training-v6';
+const CACHE = 'will-training-v7';
 
 // Built by the view as JSON. A {% templatetag openblock %} for {% templatetag closeblock %} loop with escapejs works too, but
 // escapejs writes every hyphen as a unicode escape, and a precache list you

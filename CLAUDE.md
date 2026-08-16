@@ -159,10 +159,10 @@ that matter:
   top bar in standalone mode.
 - **iOS ignores the manifest.** It only reads `apple-touch-icon` and
   `apple-mobile-web-app-title`, so both stay in `base.html`.
-- The install chip in the top bar (`#install-go`) is only unhidden for
-  `beforeinstallprompt`, which never fires on iOS — there it is the Share
-  sheet, and the chip correctly stays hidden. It is deliberately tiny: 26px
-  tall, with a `::after` overlay putting the tap target back to 44px.
+- **There is no in-app install button, on purpose.** Adding to the home screen
+  is a once-ever job for Phil, done from Safari's Share sheet or Chrome's menu,
+  so it does not earn space in Will's top bar. The `beforeinstallprompt`
+  handler and its chip were removed; do not put them back.
 
 ## Deployment
 

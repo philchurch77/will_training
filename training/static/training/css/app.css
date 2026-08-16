@@ -91,26 +91,6 @@ a { color: var(--accent); }
   min-height: 44px; padding: 0 10px;
 }
 
-/* "Add to home screen", as a small chip in the top bar. The browser only
-   offers an install while the app is not installed, so it shows once and then
-   never again - it must not take space away from the session underneath. */
-.installbtn {
-  flex: 0 0 auto;
-  position: relative;
-  display: inline-flex; align-items: center;
-  height: 26px; padding: 0 10px;
-  background: none;
-  border: 1px solid var(--line); border-radius: 999px;
-  color: var(--ink-3);
-  font: inherit; font-size: 11px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .07em;
-  cursor: pointer;
-}
-/* Small to look at, still 44px to hit: the chip is 26px tall, and this
-   invisible overlay pads the tap target back out to a thumb. */
-.installbtn::after { content: ''; position: absolute; inset: -9px -6px; }
-.installbtn:active { background: var(--surface-2); }
-
 /* --- cards ------------------------------------------------------------ */
 .card {
   background: var(--surface);

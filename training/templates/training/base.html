@@ -21,12 +21,6 @@
 <header class="topbar">
   <div class="topbar-in">
     <span class="topbar-title">{% block heading %}{% endblock %}</span>
-    {% if user.is_authenticated %}
-      {# Revealed by app.js only when the browser offers an install. Never on #}
-      {# iOS. Small and quiet on purpose: Phil taps it once, ever. #}
-      <button type="button" class="installbtn" id="install-go"
-              aria-label="Add this app to the home screen" hidden>Install</button>
-    {% endif %}
     {% if user.is_authenticated and not request.in_coach %}
       {# Deliberately understated: this is Dad's door, not part of Will's app. #}
       <a class="linkbtn" href="{% url 'training:coach_plan' %}">Coach</a>

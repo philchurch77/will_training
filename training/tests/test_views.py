@@ -333,13 +333,14 @@ class TestPwaEndpoints:
         assert "icon-192.png" in body
         assert "apple-touch-icon.png" in body
 
-    def test_the_install_prompt_is_hidden_until_the_browser_offers_it(
-        self, client, will, seeded
-    ):
+    def test_no_install_chip_in_the_top_bar(self, client, will, seeded):
+        # Adding to the home screen is the browser's job (Safari's Share
+        # sheet, Chrome's menu). The top bar stays for Will's app only.
         client.force_login(will)
         body = client.get(reverse("training:today")).content.decode()
-        assert 'id="install-go"' in body
-        assert "hidden" in body.split('id="install-go"')[1].split(">")[0]
+        assert "install-go" not in body
+        # The Safari route still has to work, so the icon tag stays.
+        assert "apple-touch-icon" in body
 
     def test_the_offline_page_renders(self, client, will):
         client.force_login(will)

@@ -42,14 +42,12 @@ uv run manage.py runserver 0.0.0.0:8000
 and browse to `http://<that-address>:8000` on the phone. Add it to the home
 screen and it opens like an app, full screen.
 
-**Android (Chrome).** A small **Install** chip appears in the top bar the first
-time. Tap it. The chip only shows while the phone thinks the app is not
-installed, so once it is done Will never sees it again. If you miss it, the
-browser menu has **Install app**.
+**iPhone (Safari).** The Share button → **Add to Home Screen**. It must be
+Safari; Chrome on iOS cannot install anything.
 
-**iPhone (Safari).** Safari ignores all of that, so it has to be the Share
-button → **Add to Home Screen**. It must be Safari; Chrome on iOS cannot
-install anything.
+**Android (Chrome).** The browser menu → **Install app**. The app carries no
+install button of its own — this is a once-ever job for Phil, so it stays out
+of Will's top bar.
 
 Either way it lands as **Training** with the blue football icon, opens without
 browser chrome, and holds his login for a year. On Android, a long press on the
