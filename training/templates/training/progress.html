@@ -6,7 +6,10 @@
 
 <div class="card card-hero">
   <div class="hero-kicker">Current streak</div>
-  <h1 class="hero-big">{{ streak }} day{{ streak|pluralize }} &#128293;</h1>
+  <h1 class="hero-big">{{ streak }} day{{ streak|pluralize }}
+    {# Decoration - the number already says it, so it is hidden from screen readers. #}
+    <span class="flame{% if not streak %} is-out{% endif %}" aria-hidden="true">&#128293;</span>
+  </h1>
   <p class="hero-sub">Your best ever is {{ longest }}.</p>
 </div>
 

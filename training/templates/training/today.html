@@ -44,7 +44,8 @@
     <p class="hero-sub">
       {{ summary.plan_day.label }}
       &middot; {{ summary.done_count }}/{{ summary.total_count }} done
-      {% if streak %}&middot; {{ streak }} day streak &#128293;{% endif %}
+      {% if streak %}&middot; {{ streak }} day streak
+        <span class="flame" aria-hidden="true">&#128293;</span>{% endif %}
     </p>
   </div>
 

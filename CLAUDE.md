@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 147 tests, ~50s
+uv run pytest                    # 173 tests, ~50s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -62,6 +62,10 @@ Function-based views on purpose: one maintainer, re-read in a year.
   done yet also does not break the streak. Preseason there are no optional days
   in the seeded plan, but the machinery stays — it is how Fri/Sat go back to
   bonus days when the season restarts.
+- **A streak and a perfect week are different bars.** One drill keeps a streak
+  alive; the `perfect-week` badge needs every drill of every required day for a
+  whole Mon-Sun week. Both read the plan as it stands *today*, not as it stood
+  back then - there is no plan history and rebuilding one is not worth it.
 - **Streak functions take the date explicitly.** Never call `date.today()`
   inside `progress.py` — the tests pin dates.
 - **One profile only.** `get_athlete()` returns the single non-staff user. The

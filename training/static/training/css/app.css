@@ -82,13 +82,25 @@ a { color: var(--accent); }
 .topbar-title { flex: 1 1 auto;
   font-weight: 800; font-size: 15px; text-transform: uppercase;
   letter-spacing: .09em; color: var(--ink-3); }
+/* Secondary actions - Coach, the back links, Sign out. A small raised chip
+   rather than flat text: as plain grey words they read as page furniture and
+   he does not know they can be pressed. Quiet enough not to compete with the
+   big blue .btn. */
 .linkbtn {
-  background: none; border: 0; color: var(--ink-3);
-  font: inherit; font-size: 14px; cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
   text-decoration: none;
+  box-shadow: var(--shadow);
   /* 44px so it is a real tap target on a phone, not a 35px sliver. */
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: 0 10px;
+  min-height: 44px; padding: 0 16px;
+}
+.linkbtn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 1px rgba(20, 24, 29, .08);
 }
 
 /* --- cards ------------------------------------------------------------ */
@@ -305,7 +317,44 @@ a { color: var(--accent); }
   border-color: #ecd9a8;
   text-align: center;
 }
-.newbadge .badge-em { font-size: 52px; }
+.newbadge .badge-em {
+  font-size: 52px;
+  display: inline-block;
+  /* One shot, not a loop. He earns each of these once ever, so it can afford
+     to make an entrance - but it must settle down and stay settled. */
+  animation: badge-in 1s ease-out;
+}
+@keyframes badge-in {
+  0%   { transform: scale(.4) rotate(-14deg); opacity: 0; }
+  45%  { transform: scale(1.18) rotate(6deg); opacity: 1; }
+  72%  { transform: scale(.96) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* --- the streak flame -------------------------------------------------- */
+/* The flame is a font glyph: there is nothing inside it to animate. What sells
+   a flicker is the whole glyph moving on irregular beats - evenly spaced
+   keyframes read as a throb, not a fire - plus a warm light that pulses with
+   it. Small numbers on purpose; this sits next to the streak he is reading,
+   and a jumping emoji next to text is hard to read past.
+   `prefers-reduced-motion` at the bottom of this file turns it off. */
+.flame {
+  display: inline-block;
+  transform-origin: 50% 85%;
+  animation: flicker 2.9s ease-in-out infinite;
+}
+@keyframes flicker {
+  0%   { transform: scale(1, 1) rotate(0deg);         filter: drop-shadow(0 0 3px rgba(240, 138, 40, .42)); }
+  11%  { transform: scale(1.05, 1.12) rotate(-2.5deg); filter: drop-shadow(0 0 8px rgba(240, 138, 40, .58)); }
+  23%  { transform: scale(.97, .95) rotate(1.5deg);    filter: drop-shadow(0 0 2px rgba(240, 138, 40, .32)); }
+  38%  { transform: scale(1.03, 1.08) rotate(2deg);    filter: drop-shadow(0 0 7px rgba(240, 138, 40, .52)); }
+  52%  { transform: scale(.99, 1.02) rotate(-1deg);    filter: drop-shadow(0 0 4px rgba(240, 138, 40, .42)); }
+  67%  { transform: scale(1.06, 1.1) rotate(-1.5deg);  filter: drop-shadow(0 0 9px rgba(240, 138, 40, .62)); }
+  81%  { transform: scale(.98, .96) rotate(1deg);      filter: drop-shadow(0 0 2px rgba(240, 138, 40, .28)); }
+  100% { transform: scale(1, 1) rotate(0deg);         filter: drop-shadow(0 0 3px rgba(240, 138, 40, .42)); }
+}
+/* No streak, no fire. A flame flickering away next to "0 days" is a small lie. */
+.flame.is-out { animation: none; filter: grayscale(1); opacity: .4; }
 
 /* --- library ---------------------------------------------------------- */
 /* One flat row that scrolls sideways. This was a wrapping two-row grid of

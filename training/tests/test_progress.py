@@ -10,9 +10,17 @@ from datetime import date, timedelta
 import pytest
 
 from training import progress
-from training.models import SessionLog
+from training.models import Badge, PlanDay, PlanDrill, SessionLog
 
-from .conftest import MONDAY, SATURDAY, SUNDAY, THURSDAY, TUESDAY, WEDNESDAY
+from .conftest import (
+    FRIDAY,
+    MONDAY,
+    SATURDAY,
+    SUNDAY,
+    THURSDAY,
+    TUESDAY,
+    WEDNESDAY,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -182,3 +190,70 @@ class TestTodaySummary:
         summary = progress.today_summary(will, SUNDAY)
         assert summary["plan_day"].is_rest
         assert summary["rows"] == []
+
+
+class TestPerfectWeeks:
+    """The plan fixture: Mon-Fri required with one drill each, Sat optional,
+    Sun rest. So a perfect week is Mon-Fri done in full."""
+
+    WEEKDAYS = (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)
+
+    def test_nothing_done_is_no_weeks(self, will, plan):
+        assert progress.perfect_weeks(will, SUNDAY) == 0
+
+    def test_every_required_day_in_full(self, will, plan, drill):
+        for day in self.WEEKDAYS:
+            tick(will, drill, day)
+        assert progress.perfect_weeks(will, SUNDAY) == 1
+
+    def test_the_optional_and_rest_days_are_not_needed(self, will, plan, drill):
+        # He trained Mon-Fri and rested Sat and Sun, exactly as asked. That is
+        # a perfect week - the same rule that stops a rest day breaking a streak.
+        for day in self.WEEKDAYS:
+            tick(will, drill, day)
+        assert SATURDAY not in progress.completed_dates(will)
+        assert progress.perfect_weeks(will, SUNDAY) == 1
+
+    def test_one_missed_day_loses_the_week(self, will, plan, drill):
+        for day in self.WEEKDAYS:
+            if day != THURSDAY:
+                tick(will, drill, day)
+        assert progress.perfect_weeks(will, SUNDAY) == 0
+
+    def test_half_a_session_is_not_a_perfect_day(self, will, plan, drill, rep_drill):
+        # Two drills on the Monday, only one of them ticked. A streak would
+        # survive this; a perfect week must not.
+        PlanDrill.objects.create(
+            plan_day=PlanDay.objects.get(plan=plan, weekday=0), drill=rep_drill, order=2
+        )
+        for day in self.WEEKDAYS:
+            tick(will, drill, day)
+        assert progress.current_streak(will, FRIDAY) == 5
+        assert progress.perfect_weeks(will, SUNDAY) == 0
+
+        tick(will, rep_drill, MONDAY)
+        assert progress.perfect_weeks(will, SUNDAY) == 1
+
+    def test_weeks_accumulate(self, will, plan, drill):
+        for day in self.WEEKDAYS:
+            tick(will, drill, day)
+            tick(will, drill, day + timedelta(days=7))
+        assert progress.perfect_weeks(will, SUNDAY + timedelta(days=7)) == 2
+
+    def test_awards_the_badge(self, will, plan, drill):
+        # Its own badge rather than the seeded one: the `seeded` fixture would
+        # activate the real plan instead of this fixture's.
+        badge = Badge.objects.create(
+            code="test-perfect-week",
+            name="Perfect week",
+            description="Every drill, every training day.",
+            kind=Badge.PERFECT_WEEKS,
+            threshold=1,
+        )
+        for day in (MONDAY, TUESDAY, WEDNESDAY):
+            tick(will, drill, day)
+        assert badge not in progress.award_badges(will, WEDNESDAY)
+
+        for day in (THURSDAY, FRIDAY):
+            tick(will, drill, day)
+        assert badge in progress.award_badges(will, SUNDAY)

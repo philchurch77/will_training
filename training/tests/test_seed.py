@@ -4,9 +4,12 @@ the principles - a drill that needs a partner, a session that has crept up to
 45 minutes, a day with no weak-foot work - these tests say so.
 """
 
+from datetime import date
+
 import pytest
 from django.core.management import call_command
 
+from training import progress
 from training.models import Badge, Drill, PlanDay, Skill, TrainingPlan
 
 pytestmark = pytest.mark.django_db
@@ -80,6 +83,29 @@ class TestSeedShape:
     def test_creates_the_badges(self, seeded):
         assert Badge.objects.count() >= 8
         assert Badge.objects.filter(code="streak-7").exists()
+
+    def test_every_badge_kind_has_a_metric(self, seeded):
+        # A badge whose kind progress.py does not measure can never be earned:
+        # it would sit at 0 on his Progress screen for ever and nothing would
+        # ever say why. (The seed makes Will itself, so no `will` fixture -
+        # the two would collide on the username.)
+        from training.views import get_athlete
+
+        values = progress._badge_values(get_athlete(), date(2026, 8, 10))
+        for badge in Badge.objects.all():
+            assert badge.kind in values, badge.code
+
+    def test_there_is_something_left_to_chase_after_a_month(self, seeded):
+        # A month of preseason clears the whole original ladder - 30 day
+        # streak, 100 drills, 500 minutes. If every badge is reachable that
+        # fast the screen goes dead just as the habit is forming, so keep a
+        # long one and keep one that cannot be reached by volume at all.
+        assert Badge.objects.filter(
+            kind=Badge.STREAK, threshold__gte=90
+        ).exists(), "no long streak badge left to chase"
+        assert Badge.objects.filter(
+            kind=Badge.PERFECT_WEEKS
+        ).exists(), "nothing rewards finishing a whole session"
 
     def test_creates_the_single_profile(self, seeded):
         from django.contrib.auth import get_user_model

@@ -501,6 +501,13 @@ BADGES = [
      Badge.TOTAL_MINUTES, 500, 9),
     ("weak-foot-25", "Two footed", "Twenty five weak foot drills done.",
      "\U0001f9a6", Badge.WEAK_FOOT, 25, 10),
+    # The two at the end are the long game. Everything above is reachable in
+    # a month of preseason; these are still there to chase afterwards.
+    ("perfect-week", "Perfect week",
+     "Every drill, on every training day, for a whole week.",
+     "\U0001f48e", Badge.PERFECT_WEEKS, 1, 11),  # not the passing dartboard
+    ("streak-100", "Century", "One hundred days in a row.", "\U0001f4af",
+     Badge.STREAK, 100, 12),
 ]
 
 

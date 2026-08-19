@@ -143,6 +143,68 @@ def total_minutes(athlete):
     )
 
 
+def _required_drills_by_weekday(plan=None):
+    """Weekday -> the set of drill ids that day asks for.
+
+    Only required days appear. Rest and optional days are left out entirely,
+    for the same reason they cannot break a streak: he is not expected to
+    train on them.
+    """
+    plan = plan or TrainingPlan.get_active()
+    if plan is None:
+        return {}
+
+    wanted = {}
+    for plan_day in plan.days.all():
+        if not plan_day.is_required:
+            continue
+        ids = set(
+            plan_day.items.filter(drill__is_active=True).values_list(
+                "drill_id", flat=True
+            )
+        )
+        if ids:
+            wanted[plan_day.weekday] = ids
+    return wanted
+
+
+def perfect_weeks(athlete, today):
+    """Whole weeks (Monday to Sunday) with every training day completed in full.
+
+    The hardest thing in the app. A streak only needs one drill a day; this
+    needs the whole session, on every day the plan asked for, for a week.
+
+    Like the streak, it reads the plan as it stands today rather than as it
+    stood back then - one athlete, one maintainer, and a rebuilt history is
+    not worth the machinery.
+    """
+    wanted = _required_drills_by_weekday()
+    if not wanted:
+        return 0
+
+    done = {}
+    for day, drill_id in SessionLog.objects.filter(
+        athlete=athlete, completed=True
+    ).values_list("date", "drill_id"):
+        done.setdefault(day, set()).add(drill_id)
+    if not done:
+        return 0
+
+    first = min(done)
+    week = first - timedelta(days=first.weekday())  # the Monday of that week
+    weeks = 0
+    while week <= today:
+        days = [week + timedelta(days=offset) for offset in range(7)]
+        if all(
+            wanted[day.weekday()] <= done.get(day, set())
+            for day in days
+            if day.weekday() in wanted
+        ):
+            weeks += 1
+        week += timedelta(days=7)
+    return weeks
+
+
 def minutes_by_skill(athlete, since=None):
     """Minutes trained per skill category, for the Progress bar chart.
 
@@ -205,6 +267,7 @@ def _badge_values(athlete, today):
         Badge.SKILLS_TRIED: skills_tried(athlete),
         Badge.TOTAL_MINUTES: total_minutes(athlete),
         Badge.WEAK_FOOT: weak_foot_sessions(athlete),
+        Badge.PERFECT_WEEKS: perfect_weeks(athlete, today),
     }
 
 

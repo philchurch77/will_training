@@ -287,12 +287,14 @@ class Badge(models.Model):
     SKILLS_TRIED = "skills_tried"
     TOTAL_MINUTES = "total_minutes"
     WEAK_FOOT = "weak_foot"
+    PERFECT_WEEKS = "perfect_weeks"
     KIND_CHOICES = [
         (STREAK, "Day streak"),
         (TOTAL_DRILLS, "Drills completed"),
         (SKILLS_TRIED, "Skills tried"),
         (TOTAL_MINUTES, "Minutes trained"),
         (WEAK_FOOT, "Weak foot drills"),
+        (PERFECT_WEEKS, "Perfect weeks"),
     ]
 
     code = models.SlugField(max_length=40, unique=True)

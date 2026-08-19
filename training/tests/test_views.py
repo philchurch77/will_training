@@ -213,6 +213,14 @@ class TestProgressScreen:
         assert response.context["streak"] == 1
         assert response.context["total_minutes"] == 10
         assert len(response.context["skill_rows"]) == 6
+        # The flame is lit only when there is a streak burning.
+        assert b"flame is-out" not in response.content
+
+    def test_the_flame_is_out_with_no_streak(self, client, will, seeded):
+        client.force_login(will)
+        response = client.get(reverse("training:progress"))
+        assert response.context["streak"] == 0
+        assert b"flame is-out" in response.content
 
 
 class TestCoachEditing:
