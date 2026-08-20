@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 173 tests, ~50s
+uv run pytest                    # 179 tests, ~70s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -79,20 +79,27 @@ Function-based views on purpose: one maintainer, re-read in a year.
 
 ## The seed data is the product
 
-`seed_drills.py` is the most important file. It holds 39 drills and the weekly
+`seed_drills.py` is the most important file. It holds 45 drills and the weekly
 plan, and the coaching brief is encoded as **assertions in
 `training/tests/test_seed.py`**. Those tests fail if someone:
 
 - adds a drill needing a partner, a goalkeeper or a teammate;
-- adds strength work, weights, plyometrics or running drills;
-- lets a session drift outside 20–30 minutes or 3–4 drills, or off the flat
-  25 minutes a day the preseason plan is balanced to;
+- adds strength work, weights, plyometrics or endurance running;
+- writes a drill longer than five minutes;
+- lets a session drift off six drills, or off the flat 30 minutes a day the
+  preseason plan is balanced to;
 - drops the weak-foot work or the fun finisher from a day;
-- breaks the warm-up-first shape, or the 30–40 drill count.
+- puts speed on more or fewer than three days, doubles it up in one session, or
+  lets it take the warm-up slot;
+- breaks the warm-up-first shape, or the 36–50 drill count.
 
 When editing drills, keep the principles:
 
 - **Ball mastery and first touch are the priority.** Technique over fitness.
+- **Speed work is football speed, not athletics.** Mostly with the ball — a
+  first touch and a burst after it, a dribble at full pelt — with a couple of
+  plain short sprints. Every one says when to stop and get his breath back.
+  `TestSpeedWork` enforces the ball-majority, the length and the recovery.
 - Every drill doable **alone** in a garden with a ball, a wall and a few cones.
 - **Both feet explicitly**, with weak-foot work in every session.
 - Instructions are **two or three short sentences written for Will to read
@@ -102,15 +109,20 @@ When editing drills, keep the principles:
 
 ### The weekly plan
 
-**Currently preseason: seven full sessions of exactly 25 minutes.** No academy
+**Currently preseason: seven full sessions of exactly 30 minutes.** No academy
 and no matches over the summer, so Friday and Saturday are ordinary training
-days and every day counts towards the streak. 175 minutes a week. Phil chose
+days and every day counts towards the streak. 210 minutes a week. Phil chose
 this knowingly after being told it is a high load; do not quietly reduce it.
 
-25 minutes lands exactly on 5 + 7 + 7 + 6 — a five-minute ball-mastery warm-up,
-two seven-minute technical drills, a six-minute fun finisher. Given the drill
-durations that is the only four-drill shape that hits 25, so a rebalance means
-picking drills at those lengths, not inventing a new shape.
+**Every drill is five minutes, so a day is six of them:** a ball-mastery
+warm-up, four technical drills, a fun finisher. Rep-based drills count as five
+minutes too (`Drill.estimated_minutes`), so the sum is 30 whatever mix a day is
+built from and rebalancing means swapping a drill, not doing arithmetic. That
+is the whole reason for the five-minute cap — keep it.
+
+**Speed is on weekdays 1, 3 and 5 only, one block per session.** Sprinting is
+the one thing here that tires him rather than teaches him. It never goes in the
+warm-up slot either: cold sprinting is how something gets pulled.
 
 **In season**, academy and matches are Friday and Saturday: set `is_optional`
 on weekdays 4 and 5 and cut their targets back, so those two carry no required
@@ -128,8 +140,8 @@ Built for a 9-year-old on a phone, outdoors:
   reads this in bright sun.
 - Skill colours are validated for colour-blind separation, and **nothing is
   identified by colour alone** — every coloured dot sits beside a written label.
-- The Progress chart is one measure across six named categories, so it uses
-  **one colour, not six**. Do not rainbow it.
+- The Progress chart is one measure across seven named categories, so it uses
+  **one colour, not seven**. Do not rainbow it.
 - **Anything that scrolls sideways must be a shortcut, never the only door.**
   The drill filter strip on All drills scrolls horizontally, which a nine-year-old
   will not go hunting for; it is only allowed because that list is also grouped

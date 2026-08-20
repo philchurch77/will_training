@@ -202,7 +202,7 @@ class PlanDay(models.Model):
         default=False,
         help_text="Academy or match day - the session is a bonus, not expected.",
     )
-    target_minutes = models.PositiveSmallIntegerField(default=25)
+    target_minutes = models.PositiveSmallIntegerField(default=30)
 
     class Meta:
         ordering = ["weekday"]

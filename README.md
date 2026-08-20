@@ -18,7 +18,7 @@ py -3.13 -m pip install uv     # once
 uv venv
 uv sync
 uv run manage.py migrate
-uv run manage.py seed_drills   # 39 drills, the weekly plan, badges, profile
+uv run manage.py seed_drills   # 45 drills, the weekly plan, badges, profile
 uv run manage.py runserver
 ```
 
@@ -185,21 +185,25 @@ from scratch. It leaves his session history alone.
 
 | Day | Session | Target |
 |-----|---------|--------|
-| Mon | Ball mastery + first touch | 25 min |
-| Tue | Dribbling + 1v1 | 25 min |
-| Wed | Passing + shooting | 25 min |
-| Thu | First touch + 1v1 | 25 min |
-| Fri | Dribbling + passing | 25 min |
-| Sat | Shooting + first touch | 25 min |
-| Sun | Weak foot + freestyle | 25 min |
+| Mon | Ball mastery + first touch | 30 min |
+| Tue | Dribbling + speed | 30 min |
+| Wed | Passing + shooting | 30 min |
+| Thu | First touch + speed | 30 min |
+| Fri | Dribbling + passing | 30 min |
+| Sat | Shooting + speed | 30 min |
+| Sun | Weak foot + freestyle | 30 min |
 
 There is no academy and there are no matches over the summer, so all seven days
-are full sessions of the same 25 minutes and every one of them counts towards
-the streak. Each day is a five-minute ball-mastery warm-up on the floor, two
-seven-minute technical drills, then a six-minute fun finisher, and every session
-includes explicit weak-foot work.
+are full sessions of the same 30 minutes and every one of them counts towards
+the streak. Every drill is five minutes, so a day is simply six of them: a
+ball-mastery warm-up on the floor, four technical drills, then a fun finisher.
+Every session includes explicit weak-foot work.
 
-That is 175 minutes of home training a week, with no light day in it. It is a
+Speed sits on three of those days — Tuesday, Thursday and Saturday. It is the
+one thing in the app that tires him rather than teaches him, so no session
+carries two speed blocks and it never takes the warm-up slot.
+
+That is 210 minutes of home training a week, with no light day in it. It is a
 lot for a nine-year-old. If he starts looking tired or bored, open Coach, pick a
 day and tick **Rest day** — two taps, and his streak is unaffected.
 
@@ -219,8 +223,8 @@ never reads zero first thing in the morning.
 
 ## The drills
 
-39 drills across six skills: Ball mastery, Dribbling, Passing, Shooting, First
-touch and 1v1. Every one of them:
+45 drills across seven skills: Ball mastery, Dribbling, Passing, Shooting,
+First touch, 1v1 and Speed. Every one of them:
 
 - can be done **alone**, in a garden or a park — a wall stands in for a passing
   partner;
@@ -229,8 +233,12 @@ touch and 1v1. Every one of them:
 - has one coaching cue ("head up", "little touches", "laces, not toes").
 
 Weighted towards ball mastery and first touch, because that is what matters at
-nine. There is no strength work, no weights, no plyometrics and no distance
-running anywhere in the set — and the test suite fails if anyone adds any.
+nine, and nothing runs longer than five minutes. The Speed drills are football
+speed rather than athletics — a first touch and a burst after it, a dribble at
+full pelt, a couple of plain ten-step sprints — and each one has recovery
+written into it. There is no strength work, no weights, no plyometrics and no
+distance running anywhere in the set, and the test suite fails if anyone adds
+any.
 
 ---
 
@@ -279,11 +287,11 @@ contrast ratios rather than by eye, because he will be reading this outdoors:
 body text is 5:1 or better on white, and the blue is 5.5:1. The six skill
 colours are checked for colour-blind separation, and every one of them sits
 next to a written label — nothing in the app is identified by colour alone.
-The Progress chart is one measure across six named categories, so it uses a
-single colour rather than six; the skill names are on the bars.
+The Progress chart is one measure across seven named categories, so it uses a
+single colour rather than seven; the skill names are on the bars.
 
 The test suite covers the models, the streak rules, session completion and
 access to the coach area — and `tests/test_seed.py` asserts the coaching principles
 themselves, so if a future edit sneaks in a drill needing a partner, or lets a
-session creep past 30 minutes, or drops the weak-foot work from a day, the tests
-say so.
+session creep past 30 minutes, or drops the weak-foot work from a day, or piles
+two sprint blocks into one session, the tests say so.

@@ -7,9 +7,10 @@ Coaching principles baked into this data, for a 9-year-old in academy football:
 * Every drill is doable alone, in a garden or a park, with a ball, a wall and a
   few cones. A wall does the job of a passing partner.
 * Both feet feature everywhere, and every session has explicit weak-foot work.
-* No strength work, no weights, no plyometrics, no distance running.
-* Each session is a short warm-up, two technical drills, then a fun finisher,
-  and lands on exactly 25 minutes.
+* Short speed work is in - accelerations, a first touch and a burst after it,
+  a dribble at full pelt. No weights, no plyometrics, no distance running.
+* Nothing lasts longer than five minutes. Each session is a warm-up, four
+  technical drills and a fun finisher, and lands on exactly 30 minutes.
 * Instructions are written for Will to read himself.
 
 Re-running is safe: everything keys off a slug and updates in place.
@@ -30,7 +31,7 @@ from training.models import (
 
 DEFAULT_PIN = "1234"
 
-# Fixed slot order. These six hues are validated for colour-blind separation
+# Fixed slot order. These seven hues are validated for colour-blind separation
 # against the app's white surface - see the README before changing them.
 SKILLS = [
     ("ball-mastery", "Ball mastery", "⚽", "#2a78d6", 1),
@@ -39,6 +40,7 @@ SKILLS = [
     ("shooting", "Shooting", "\U0001f945", "#eda100", 4),
     ("first-touch", "First touch", "✨", "#e87ba4", 5),
     ("one-v-one", "1v1", "⚔️", "#4a3aa7", 6),
+    ("speed", "Speed", "⚡", "#a32c3f", 7),
 ]
 
 # (slug, name, skill, instructions, cue, minutes, reps, equipment, difficulty,
@@ -111,10 +113,10 @@ DRILLS = [
         "freestyle-five",
         "Freestyle time",
         "ball-mastery",
-        "Six minutes of anything you like with the ball. Try a trick you saw "
+        "Five minutes of anything you like with the ball. Try a trick you saw "
         "on telly, or make one up. There is no wrong way to do this one.",
         "Have fun with it",
-        6, None, "b s", 1, False, True,
+        5, None, "b s", 1, False, True,
     ),
     # --- First touch -----------------------------------------------------
     (
@@ -125,7 +127,7 @@ DRILLS = [
         "your foot. Take one touch to control it and one to pass it back. Swap "
         "feet every five goes.",
         "Kill it dead",
-        7, None, "b w", 1, False, False,
+        5, None, "b w", 1, False, False,
     ),
     (
         "cushion-touch",
@@ -135,7 +137,7 @@ DRILLS = [
         "pull your foot back slightly so the ball drops softly instead of "
         "bouncing off you. Imagine catching an egg without breaking it.",
         "Soft foot, catch the egg",
-        7, None, "b w", 2, False, False,
+        5, None, "b w", 2, False, False,
     ),
     (
         "thigh-control",
@@ -155,7 +157,7 @@ DRILLS = [
         "sideways so you end up facing the other way. Do it both ways: turning "
         "left and turning right. The turn should take one touch, not three.",
         "One touch, then you're gone",
-        7, None, "b w s", 3, True, False,
+        5, None, "b w s", 3, True, False,
     ),
     (
         "weak-foot-control",
@@ -165,7 +167,7 @@ DRILLS = [
         "foot too. Do not cheat and use your good foot. Twenty passes, all weak "
         "foot.",
         "Weak foot only",
-        7, None, "b w", 2, True, False,
+        5, None, "b w", 2, True, False,
     ),
     (
         "control-and-move",
@@ -175,7 +177,7 @@ DRILLS = [
         "first touch towards the cone so you are moving as you control it. A "
         "good first touch takes you somewhere.",
         "Touch it where you're going",
-        7, None, "b w c", 2, False, False,
+        5, None, "b w c", 2, False, False,
     ),
     (
         "bouncing-control",
@@ -185,7 +187,7 @@ DRILLS = [
         "Whatever way it comes, get it under control in two touches. Use your "
         "foot, thigh or chest, whichever fits.",
         "Two touches, ball is yours",
-        6, None, "b w", 3, False, False,
+        5, None, "b w", 3, False, False,
     ),
     (
         "juggling-laces",
@@ -222,7 +224,7 @@ DRILLS = [
         "Juggle the ball any way you like - feet, thighs, head - and count your "
         "best run. Write the number down and try to beat it next week.",
         "Beat your best",
-        6, None, "b", 2, False, True,
+        5, None, "b", 2, False, True,
     ),
     # --- Dribbling -------------------------------------------------------
     (
@@ -233,7 +235,7 @@ DRILLS = [
         "and out of them with little touches, then turn at the end and come "
         "back. Use both feet - the outside of one, the inside of the other.",
         "Little touches, head up",
-        7, None, "b c s", 1, False, False,
+        5, None, "b c s", 1, False, False,
     ),
     (
         "figure-eight-dribble",
@@ -243,7 +245,7 @@ DRILLS = [
         "around them. Go slowly and keep the ball close, then speed up when it "
         "feels easy. Change direction with the outside of your foot.",
         "Ball never leaves you",
-        7, None, "b c s", 2, False, False,
+        5, None, "b c s", 2, False, False,
     ),
     (
         "drag-backs",
@@ -253,7 +255,7 @@ DRILLS = [
         "push it forward again. Do ten with your right foot, then ten with your "
         "left. Keep your head up and look forward, not down at the ball.",
         "Head up, sole on top",
-        6, None, "b s", 1, True, False,
+        5, None, "b s", 1, True, False,
     ),
     (
         "cruyff-turn",
@@ -264,7 +266,7 @@ DRILLS = [
         "fake first - the turn only works if the defender believes you. Do it "
         "both ways.",
         "Sell the fake, then go",
-        7, None, "b c s", 2, False, False,
+        5, None, "b c s", 2, False, False,
     ),
     (
         "step-over",
@@ -274,7 +276,7 @@ DRILLS = [
         "the ball away with the outside of your other foot. Practise going both "
         "left and right. Big step over, small touch away.",
         "Big step, small touch",
-        7, None, "b c s", 2, False, False,
+        5, None, "b c s", 2, False, False,
     ),
     (
         "inside-outside-cuts",
@@ -284,7 +286,7 @@ DRILLS = [
         "foot, dribble again and cut it back with the outside. Do a whole set "
         "with your right foot, then a whole set with your left.",
         "Sharp cut, then accelerate",
-        7, None, "b c s", 2, True, False,
+        5, None, "b c s", 2, True, False,
     ),
     # --- Passing ---------------------------------------------------------
     (
@@ -295,7 +297,7 @@ DRILLS = [
         "stopping it first. Use the inside of your foot and keep the ball on "
         "the floor. See how many you can string together.",
         "Inside of the foot, low",
-        7, None, "b w", 2, False, False,
+        5, None, "b w", 2, False, False,
     ),
     (
         "weak-foot-wall-pass",
@@ -305,7 +307,7 @@ DRILLS = [
         "wrong and the ball will go everywhere at first. Twenty passes, no "
         "swapping.",
         "Weak foot only",
-        7, None, "b w", 2, True, False,
+        5, None, "b w", 2, True, False,
     ),
     (
         "two-touch-wall-pass",
@@ -315,7 +317,7 @@ DRILLS = [
         "the next. Touch, pass, touch, pass - get a rhythm going. Swap which "
         "foot you use every ten.",
         "Touch, pass, touch, pass",
-        6, None, "b w", 1, False, False,
+        5, None, "b w", 1, False, False,
     ),
     (
         "target-passing",
@@ -335,7 +337,7 @@ DRILLS = [
         "it goes hard and stays low. Lean over the ball so it does not balloon "
         "up. Ten with each foot.",
         "Lean over it, keep it down",
-        6, None, "b w s", 3, False, False,
+        5, None, "b w s", 3, False, False,
     ),
     (
         "wall-target-challenge",
@@ -345,7 +347,7 @@ DRILLS = [
         "out of ten. Then try with your other foot and see if you can beat it. "
         "Tell your coach your best score.",
         "Aim small, miss small",
-        6, None, "b w", 2, False, True,
+        5, None, "b w", 2, False, True,
     ),
     # --- Shooting --------------------------------------------------------
     (
@@ -356,7 +358,7 @@ DRILLS = [
         "your toes down, lock your ankle, and follow through towards where you "
         "want it to go. Ten with each foot.",
         "Laces, not toes",
-        7, None, "b w s", 2, False, False,
+        5, None, "b w s", 2, False, False,
     ),
     (
         "corner-placement",
@@ -376,7 +378,7 @@ DRILLS = [
         "get the technique right, then step back a bit. Fifteen shots, no "
         "swapping feet.",
         "Weak foot only",
-        7, None, "b w c", 3, True, False,
+        5, None, "b w c", 3, True, False,
     ),
     (
         "low-driven-shot",
@@ -386,7 +388,7 @@ DRILLS = [
         "the ball as you strike it - leaning back is what sends it over the "
         "bar. Ten with each foot.",
         "Lean over it",
-        6, None, "b w s", 2, False, False,
+        5, None, "b w s", 2, False, False,
     ),
     (
         "turn-and-shoot",
@@ -396,7 +398,7 @@ DRILLS = [
         "quickly and shoot. Try to do it in two touches - turn, shoot. Both "
         "feet.",
         "Turn quick, shoot early",
-        7, None, "b w c", 3, False, False,
+        5, None, "b w c", 3, False, False,
     ),
     # --- 1v1 -------------------------------------------------------------
     (
@@ -407,7 +409,7 @@ DRILLS = [
         "over, then push the ball past it with the outside of your foot and "
         "sprint three steps. Go past it on both sides.",
         "Explode after the trick",
-        7, None, "b c s", 2, False, False,
+        5, None, "b c s", 2, False, False,
     ),
     (
         "drag-back-escape",
@@ -417,7 +419,7 @@ DRILLS = [
         "other direction. This is what you do when a defender blocks your way. "
         "Practise escaping with both feet.",
         "Drag it, turn, go",
-        6, None, "b c s", 2, True, False,
+        5, None, "b c s", 2, True, False,
     ),
     (
         "cruyff-past-cone",
@@ -427,7 +429,7 @@ DRILLS = [
         "accelerate. The fake is the important bit - make it look real. Both "
         "directions.",
         "Fake it properly",
-        7, None, "b c s", 3, False, False,
+        5, None, "b c s", 3, False, False,
     ),
     (
         "change-of-pace",
@@ -437,46 +439,118 @@ DRILLS = [
         "for three or four steps, then slow down again. Defenders hate it when "
         "you change speed suddenly.",
         "Slow, then GO",
-        6, None, "b c s", 2, False, False,
+        5, None, "b c s", 2, False, False,
+    ),
+    # --- Speed -----------------------------------------------------------
+    (
+        "sprint-to-the-ball",
+        "Sprint to the ball",
+        "speed",
+        "Put the ball about ten steps in front of you and stand up tall. Sprint "
+        "at it as fast as you can, then take one soft touch to stop it dead. "
+        "Walk back, get your breath, and go again.",
+        "Explode, then calm the ball",
+        5, None, "b s", 1, False, False,
+    ),
+    (
+        "first-touch-and-go",
+        "First touch and go",
+        "speed",
+        "Pass the ball against the wall, and as it comes back push your first "
+        "touch forward and chase it for five quick steps. Do a set with your "
+        "right foot, then a set with your left. The touch is what makes the "
+        "run work.",
+        "Touch forward, then go",
+        5, None, "b w s", 2, True, False,
+    ),
+    (
+        "speed-dribble-gate",
+        "Speed dribble",
+        "speed",
+        "Put two cones about fifteen steps apart. Dribble from one to the other "
+        "as fast as you can while keeping the ball close enough to stop. Turn "
+        "at the cone and come straight back.",
+        "Fast feet, ball still yours",
+        5, None, "b c s", 2, False, False,
+    ),
+    (
+        "turn-and-sprint",
+        "Turn and sprint",
+        "speed",
+        "Put two cones about ten steps apart and stand at one of them. Sprint "
+        "to the other cone, touch the ground beside it, turn and sprint back. "
+        "Do five of those and rest properly in between.",
+        "Low on the turn",
+        5, None, "c s", 1, False, False,
+    ),
+    (
+        "standing-start",
+        "Standing starts",
+        "speed",
+        "Stand still with one foot a little in front of the other, like you are "
+        "waiting for the ball to come. Push hard off your back foot and sprint "
+        "ten steps, then slow down gently. Rest until you feel ready before the "
+        "next one.",
+        "First three steps win it",
+        5, None, "s", 1, False, False,
+    ),
+    (
+        "beat-the-clock",
+        "Beat the clock",
+        "speed",
+        "Put two cones about ten steps apart and time yourself dribbling down "
+        "and back. Write the time down, have a breather, then try to beat it. "
+        "Three goes is plenty, because this one is about being quick, not tired.",
+        "Beat your own time",
+        5, None, "b c s", 2, False, True,
     ),
 ]
 
 # weekday -> (label, target_minutes, is_rest, is_optional, [drill slugs in order])
 #
-# PRESEASON SHAPE: seven full sessions of exactly 25 minutes. There is no
+# PRESEASON SHAPE: seven full sessions of exactly 30 minutes. There is no
 # academy and there are no matches over the summer, so Friday and Saturday are
 # no longer bonus days - every day counts towards the streak. When the season
 # restarts, put is_optional back on weekdays 4 and 5 and cut them back down.
 #
-# 25 minutes lands exactly on a four-drill day of 5 + 7 + 7 + 6: a five-minute
-# ball-mastery warm-up on the floor, two seven-minute technical drills, then a
-# six-minute fun finisher. Every day still carries explicit weak-foot work.
+# Every drill is five minutes, so a day is simply six of them: a ball-mastery
+# warm-up on the floor, four technical drills, then a fun finisher. Rep-based
+# drills count as five minutes too, so the sum lands on 30 either way and
+# rebalancing a day means swapping a drill, not doing arithmetic.
+#
+# Speed sits on three days - Tuesday, Thursday and Saturday. It is the one
+# thing here that tires him rather than teaches him, so it is spaced out and
+# never doubled up in a session. Every day still carries explicit weak-foot
+# work.
 PLAN_NAME = "Will's Week"
 PLAN_DAYS = [
-    (0, "Ball mastery + first touch", 25, False, False, [
-        "foundations", "weak-foot-control", "wall-control-inside",
-        "keepy-up-record",
+    (0, "Ball mastery + first touch", 30, False, False, [
+        "foundations", "wall-control-inside", "weak-foot-control",
+        "cushion-touch", "two-touch-wall-pass", "keepy-up-record",
     ]),
-    (1, "Dribbling + 1v1", 25, False, False, [
-        "rollovers", "step-over", "cruyff-past-cone", "freestyle-five",
+    (1, "Dribbling + speed", 30, False, False, [
+        "rollovers", "cone-slalom", "step-over", "speed-dribble-gate",
+        "cruyff-past-cone", "freestyle-five",
     ]),
-    (2, "Passing + shooting", 25, False, False, [
-        "sole-rolls", "weak-foot-wall-pass", "laces-technique",
-        "wall-target-challenge",
+    (2, "Passing + shooting", 30, False, False, [
+        "sole-rolls", "weak-foot-wall-pass", "wall-pass-one-touch",
+        "laces-technique", "corner-placement", "wall-target-challenge",
     ]),
-    (3, "First touch + 1v1", 25, False, False, [
-        "figure-eight-legs", "first-touch-turn", "step-over-past-cone",
-        "keepy-up-record",
+    (3, "First touch + speed", 30, False, False, [
+        "figure-eight-legs", "first-touch-turn", "first-touch-and-go",
+        "control-and-move", "step-over-past-cone", "juggling-laces",
     ]),
-    (4, "Dribbling + passing", 25, False, False, [
-        "toe-taps", "inside-outside-cuts", "wall-pass-one-touch",
-        "wall-target-challenge",
+    (4, "Dribbling + passing", 30, False, False, [
+        "toe-taps", "inside-outside-cuts", "figure-eight-dribble",
+        "driven-pass", "target-passing", "thigh-juggles",
     ]),
-    (5, "Shooting + first touch", 25, False, False, [
-        "weak-foot-taps", "turn-and-shoot", "cushion-touch", "keepy-up-record",
+    (5, "Shooting + speed", 30, False, False, [
+        "weak-foot-taps", "turn-and-shoot", "low-driven-shot",
+        "bouncing-control", "drag-back-escape", "beat-the-clock",
     ]),
-    (6, "Weak foot + freestyle", 25, False, False, [
-        "sole-rolls", "weak-foot-finish", "cone-slalom", "freestyle-five",
+    (6, "Weak foot + freestyle", 30, False, False, [
+        "sole-rolls", "weak-foot-finish", "cone-slalom", "weak-foot-control",
+        "drag-backs", "weak-foot-juggles",
     ]),
 ]
 
@@ -496,7 +570,7 @@ BADGES = [
     ("drills-100", "100 drills", "One hundred drills. Proper dedication.",
      "\U0001f451", Badge.TOTAL_DRILLS, 100, 7),
     ("all-skills", "All rounder", "Tried every single skill category.",
-     "\U0001f308", Badge.SKILLS_TRIED, 6, 8),
+     "\U0001f308", Badge.SKILLS_TRIED, 7, 8),
     ("minutes-500", "500 minutes", "Over eight hours of training.", "⏱️",
      Badge.TOTAL_MINUTES, 500, 9),
     ("weak-foot-25", "Two footed", "Twenty five weak foot drills done.",

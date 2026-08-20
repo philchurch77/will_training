@@ -41,9 +41,10 @@ FORBIDDEN_WORDS = [
     "someone to",
 ]
 
-# Training a 9-year-old should not involve any of this.
+# Training a 9-year-old should not involve any of this. Short sprints and
+# accelerations are in now - see TestSpeedWork - but endurance running and
+# anything out of a gym stays out.
 BANNED_TRAINING = [
-    "sprint repeat",
     "weights",
     "dumbbell",
     "barbell",
@@ -59,14 +60,14 @@ BANNED_TRAINING = [
 
 
 class TestSeedShape:
-    def test_creates_between_30_and_40_drills(self, seeded):
-        assert 30 <= Drill.objects.count() <= 40
+    def test_creates_between_36_and_50_drills(self, seeded):
+        assert 36 <= Drill.objects.count() <= 50
 
-    def test_creates_all_six_skills(self, seeded):
-        assert Skill.objects.count() == 6
+    def test_creates_all_seven_skills(self, seeded):
+        assert Skill.objects.count() == 7
         assert set(Skill.objects.values_list("slug", flat=True)) == {
             "ball-mastery", "dribbling", "passing", "shooting",
-            "first-touch", "one-v-one",
+            "first-touch", "one-v-one", "speed",
         }
 
     def test_every_skill_has_drills(self, seeded):
@@ -142,7 +143,10 @@ class TestDrillQuality:
 
     def test_every_drill_needs_only_a_ball_wall_cones_or_space(self, seeded):
         for drill in Drill.objects.all():
-            assert drill.needs_ball, f"{drill.slug} should need a ball"
+            # Speed is the one skill where a drill may be ball-free: a
+            # standing start is a standing start.
+            if drill.skill.slug != "speed":
+                assert drill.needs_ball, f"{drill.slug} should need a ball"
             labels = {label for _e, label in drill.equipment}
             assert labels <= {"Ball", "Wall", "Cones", "Space"}, drill.slug
 
@@ -152,10 +156,15 @@ class TestDrillQuality:
                 drill.slug
             )
 
-    def test_no_single_drill_is_longer_than_ten_minutes(self, seeded):
-        """Attention span at nine is short - keep every block bite sized."""
+    def test_no_single_drill_is_longer_than_five_minutes(self, seeded):
+        """Attention span at nine is short - keep every block bite sized.
+
+        Five is also what keeps the plan arithmetic trivial: a rep-based drill
+        counts as five minutes too, so six drills is thirty minutes whatever
+        mix a day is built from.
+        """
         for drill in Drill.objects.filter(duration_minutes__isnull=False):
-            assert drill.duration_minutes <= 10, drill.slug
+            assert drill.duration_minutes <= 5, drill.slug
 
     def test_the_named_staples_are_all_present(self, seeded):
         have = set(Drill.objects.values_list("slug", flat=True))
@@ -185,27 +194,27 @@ class TestWeeklyPlan:
         required = [d for d in seeded.days.all() if d.is_required]
         assert len(required) == 7
 
-    def test_every_session_is_three_or_four_drills(self, seeded):
+    def test_every_session_is_six_drills(self, seeded):
         for day in seeded.days.all():
             if not day.is_required:
                 continue
             count = day.items.count()
-            assert 3 <= count <= 4, f"{day.get_weekday_display()} has {count}"
+            assert count == 6, f"{day.get_weekday_display()} has {count}"
 
-    def test_every_session_lands_between_20_and_30_minutes(self, seeded):
+    def test_every_session_lands_between_25_and_30_minutes(self, seeded):
         for day in seeded.days.all():
             if not day.is_required:
                 continue
             total = sum(item.drill.estimated_minutes for item in day.items.all())
-            assert 20 <= total <= 30, (
+            assert 25 <= total <= 30, (
                 f"{day.get_weekday_display()} is {total} minutes"
             )
 
-    def test_the_week_is_balanced_at_25_minutes_a_day(self, seeded):
-        """Preseason ask: the same 25 minutes every day, no light days."""
+    def test_the_week_is_balanced_at_30_minutes_a_day(self, seeded):
+        """Preseason ask: the same 30 minutes every day, no light days."""
         for day in seeded.days.all():
             total = sum(item.drill.estimated_minutes for item in day.items.all())
-            assert total == 25, f"{day.get_weekday_display()} is {total} minutes"
+            assert total == 30, f"{day.get_weekday_display()} is {total} minutes"
 
     def test_the_target_minutes_match_the_drills(self, seeded):
         for day in seeded.days.all():
@@ -244,7 +253,7 @@ class TestWeeklyPlan:
         for day in seeded.days.all():
             for item in day.items.all():
                 used.add(item.drill.skill.slug)
-        assert len(used) == 6, f"unused skills: {set(Skill.objects.values_list('slug', flat=True)) - used}"
+        assert len(used) == 7, f"unused skills: {set(Skill.objects.values_list('slug', flat=True)) - used}"
 
     def test_the_week_is_not_overloaded(self, seeded):
         """Total required home minutes across the week, sanity bound."""
@@ -254,7 +263,65 @@ class TestWeeklyPlan:
             if day.is_required
             for item in day.items.all()
         )
-        assert 150 <= total <= 190, f"{total} minutes of home training a week"
+        assert 190 <= total <= 220, f"{total} minutes of home training a week"
+
+
+class TestSpeedWork:
+    """Speed is the newest part of the brief and the easiest to overdo.
+
+    Sprinting is the one thing in here that tires him rather than teaches him,
+    so it is short, it is spaced across the week, and a session never carries
+    two of them.
+    """
+
+    def test_there_is_a_speed_skill_with_real_drills(self, seeded):
+        assert Skill.objects.get(slug="speed").drills.count() >= 5
+
+    def test_most_speed_work_is_done_with_the_ball(self, seeded):
+        """Football speed, not athletics. A couple of plain sprints are fine."""
+        drills = list(Skill.objects.get(slug="speed").drills.all())
+        with_ball = [d for d in drills if d.needs_ball]
+        assert len(with_ball) * 2 > len(drills), "too much running, not enough ball"
+
+    def test_every_speed_drill_is_short(self, seeded):
+        for drill in Skill.objects.get(slug="speed").drills.all():
+            assert drill.estimated_minutes <= 5, drill.slug
+
+    def test_speed_drills_tell_him_to_recover(self, seeded):
+        """A nine-year-old going flat out needs telling to stop and breathe."""
+        drills = list(Skill.objects.get(slug="speed").drills.all())
+        resting = [
+            d
+            for d in drills
+            if any(
+                word in d.instructions.lower()
+                for word in ("rest", "breath", "walk back", "slow down")
+            )
+        ]
+        assert len(resting) * 2 >= len(drills), "no recovery written into the sprints"
+
+    def test_speed_appears_on_three_days_a_week(self, seeded):
+        days = [
+            day
+            for day in seeded.days.all()
+            if any(item.drill.skill.slug == "speed" for item in day.items.all())
+        ]
+        assert len(days) == 3, f"speed on {len(days)} days"
+
+    def test_no_session_doubles_up_on_speed(self, seeded):
+        for day in seeded.days.all():
+            count = sum(
+                1 for item in day.items.all() if item.drill.skill.slug == "speed"
+            )
+            assert count <= 1, f"{day.get_weekday_display()} has {count} speed drills"
+
+    def test_speed_never_replaces_the_warm_up(self, seeded):
+        """Cold sprinting is how something gets pulled. Ball mastery comes first."""
+        for day in seeded.days.all():
+            if not day.is_required:
+                continue
+            first = day.items.order_by("order").first().drill
+            assert first.skill.slug != "speed", day.get_weekday_display()
 
 
 class TestIdempotency:
@@ -292,7 +359,7 @@ class TestIdempotency:
 
     def test_reset_rebuilds_cleanly(self, seeded):
         call_command("seed_drills", "--reset", verbosity=0)
-        assert 30 <= Drill.objects.count() <= 40
+        assert 36 <= Drill.objects.count() <= 50
         assert TrainingPlan.objects.filter(is_active=True).count() == 1
 
 

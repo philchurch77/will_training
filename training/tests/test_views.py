@@ -212,7 +212,7 @@ class TestProgressScreen:
         response = client.get(reverse("training:progress"))
         assert response.context["streak"] == 1
         assert response.context["total_minutes"] == 10
-        assert len(response.context["skill_rows"]) == 6
+        assert len(response.context["skill_rows"]) == 7
         # The flame is lit only when there is a streak burning.
         assert b"flame is-out" not in response.content
 
