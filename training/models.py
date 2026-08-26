@@ -142,7 +142,13 @@ class Drill(models.Model):
 
     @property
     def target_label(self):
-        """Short label for the Today list, e.g. '5 min' or '50 reps'."""
+        """Short label, e.g. '5 min' or '50 reps'.
+
+        His screens only ever use it for the rep-based drills: a number of
+        keepy-ups is something to beat, but a length is something to stop at,
+        and he stopped. The coach screens use both, because that is where the
+        plan is balanced to thirty minutes a day.
+        """
         if self.is_timed:
             return f"{self.duration_minutes} min"
         return f"{self.target_reps} reps"

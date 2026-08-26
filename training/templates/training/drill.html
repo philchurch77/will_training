@@ -30,8 +30,8 @@
 
 <div class="card">
   {% if drill.is_timed %}
-    {# No countdown. The session clock is running; this one is his to pace. #}
-    <p class="count-target">About {{ drill.duration_minutes }} minutes</p>
+    {# No length on the drill at all - the session clock is the only clock. #}
+    <p class="count-target">Take your time</p>
     <p class="muted center" style="margin:0">
       There's no timer on this one. Stay on it for as long as you're enjoying
       it, then tick it off.

@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 202 tests, ~75s
+uv run pytest                    # 204 tests, ~77s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -164,8 +164,11 @@ Built for a 9-year-old on a phone, outdoors:
 
 - Large tap targets (64px minimum), high contrast, minimal text.
 - **No dropdowns and no typing anywhere except the PIN pad** on Will's screens.
-- **Nothing counts down at him.** The one clock in the app counts up and he
-  decides when it stops.
+- **Nothing counts down at him, and no drill shows a length.** The one clock in
+  the app counts up and he decides when it stops. `Drill.target_label` is for
+  the rep drills and the coach screens only - `TestDrillAndLibrary` guards it
+  on Today, All drills and the drill page. The minutes stay in the data because
+  the plan is balanced on them.
   Coach screens may use ordinary form controls.
 - Palette is white, grey and blue. Contrast ratios were measured, not eyeballed:
   body text ≥5:1, accent `#1667c9` at 5.5:1 on white. Keep it that way — he

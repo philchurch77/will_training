@@ -38,11 +38,13 @@
           <span class="drill-main">
             <span class="drill-name">{{ drill.name }}</span>
             <span class="drill-meta">
-              <span>{{ drill.target_label }}</span>
-              <span class="kit" aria-hidden="true">
-                {% for emoji, label in drill.equipment %}{{ emoji }}{% endfor %}
-              </span>
+              {% if not drill.is_timed %}<span>{{ drill.target_label }}</span>{% endif %}
               {% if drill.weak_foot %}<span>weak foot</span>{% endif %}
+              {% if drill.is_juggling %}<span>juggling</span>{% endif %}
+              {# Every drill needs a ball, so saying so on all fifty says nothing. #}
+              <span class="kit" aria-hidden="true">
+                {% for emoji, label in drill.equipment %}{% if label != "Ball" %}{{ emoji }}{% endif %}{% endfor %}
+              </span>
             </span>
           </span>
           <span class="chev" aria-hidden="true">&rsaquo;</span>

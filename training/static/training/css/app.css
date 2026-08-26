@@ -140,6 +140,11 @@ a { color: var(--accent); }
   box-shadow: var(--shadow);
   color: inherit;
 }
+/* On All drills the row is still a single link, so it keeps the link reset
+   and the press feedback. On Today the row is a list item and the reset lands
+   on .drill-main instead. */
+a.drill-row { text-decoration: none; padding: 14px; gap: 14px; }
+a.drill-row:active { transform: scale(.985); }
 .drill-row.is-done { border-color: var(--accent-line); background: var(--accent-soft); }
 .drill-row.is-done .drill-name { color: var(--ink-2); }
 

@@ -189,6 +189,33 @@ class TestDrillAndLibrary:
         body = client.get(reverse("training:drill", args=[drill.slug])).content.decode()
         assert 'id="clockchip"' in body
 
+    def test_no_length_is_ever_shown_on_his_screens(self, client, will, seeded):
+        """The drills still have lengths - the plan is balanced on them - but he
+        never sees one. A number on a drill reads as permission to stop, and
+        that is what he was doing. Coach screens still show them."""
+        from training.models import Drill
+
+        timed = Drill.objects.filter(duration_minutes__isnull=False).first()
+        client.force_login(will)
+
+        for url in (
+            reverse("training:today"),
+            reverse("training:library"),
+            reverse("training:drill", args=[timed.slug]),
+        ):
+            body = client.get(url).content.decode()
+            assert timed.target_label not in body, url
+            assert f"{timed.duration_minutes} minutes" not in body, url
+
+    def test_the_coach_still_sees_drill_lengths(self, client, will, seeded):
+        # Phil needs them: they are how a day is kept to thirty minutes.
+        from training.models import Drill
+
+        timed = Drill.objects.filter(duration_minutes__isnull=False).first()
+        client.force_login(will)
+        body = client.get(reverse("training:coach_drills")).content.decode()
+        assert timed.target_label in body
+
     def test_a_rep_drill_gets_a_counter(self, client, will, rep_drill):
         client.force_login(will)
         body = client.get(

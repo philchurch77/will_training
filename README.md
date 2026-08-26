@@ -229,8 +229,12 @@ day's planned length, so the usual answer is one tap on *Save*. A figure he sets
 himself is the one case where the clock is allowed to go *down*, so it also
 corrects a clock he left running by mistake.
 
-The drills still say roughly how long they are meant to take, and that is all it
-is now: a guide for planning the week, not a stopwatch pointed at him.
+**No drill shows him a length at all any more** - not on Today, not on All
+drills, not on the drill itself. The lengths still exist in the data, because
+that is how a day is balanced to thirty minutes, and Coach still shows them;
+he just never sees one. A number on a drill reads as permission to stop. Rep
+targets stay, because thirty keepy-ups is something to beat rather than
+something to stop at.
 
 **Minutes on the Progress screen come from that clock.** On a day he ran it, the
 day is worth what the clock says, shared across the drills he ticked. On a day
@@ -261,7 +265,8 @@ First touch, 1v1 and Speed. Every one of them:
 - has one coaching cue ("head up", "little touches", "laces, not toes").
 
 Weighted towards ball mastery and first touch, because that is what matters at
-nine, and nothing runs longer than five minutes. The Speed drills are football
+nine, and nothing runs longer than five minutes - a planning figure he is never
+shown. The Speed drills are football
 speed rather than athletics — a first touch and a burst after it, a dribble at
 full pelt, a couple of plain ten-step sprints — and each one has recovery
 written into it. There is no strength work, no weights, no plyometrics and no
