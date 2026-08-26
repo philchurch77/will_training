@@ -107,6 +107,27 @@ class TestTodayScreen:
         for item in today.items.all():
             assert item.drill.name in body
 
+    def test_today_carries_the_session_clock(self, client, will, plan):
+        client.force_login(will)
+        body = client.get(reverse("training:today")).content.decode()
+        assert 'id="session"' in body
+        assert 'id="clockstart"' in body
+
+    def test_a_drill_can_be_ticked_off_without_opening_it(self, client, will, plan, drill):
+        # The tick is the whole job on a normal day; the drill page is for
+        # reading the instructions. One tap, no page to come back from.
+        from training.models import SessionLog
+
+        client.force_login(will)
+        body = client.get(reverse("training:today")).content.decode()
+        assert reverse("training:drill_complete", args=[drill.slug]) in body
+
+        client.post(
+            reverse("training:drill_complete", args=[drill.slug]),
+            {"session_seconds": "600"},
+        )
+        assert SessionLog.objects.filter(athlete=will, drill=drill).exists()
+
     def test_a_rest_day_says_so(self, client, will, plan):
         """Force the plan so every day is a rest day, then check the wording."""
         from training.models import PlanDay
@@ -151,10 +172,22 @@ class TestDrillAndLibrary:
         assert drill.cue in body
         assert "Tap the ball." in body
 
-    def test_a_timed_drill_gets_a_clock(self, client, will, drill):
+    def test_a_timed_drill_has_no_countdown(self, client, will, drill):
+        """The clock moved up to the session. A drill he is enjoying should not
+        have a number ticking down at him telling him to stop."""
         client.force_login(will)
         body = client.get(reverse("training:drill", args=[drill.slug])).content.decode()
-        assert 'id="clock"' in body
+        assert 'id="clock"' not in body
+        assert "no timer on this one" in body
+
+    def test_the_session_clock_is_reachable_from_inside_a_drill(
+        self, client, will, drill
+    ):
+        # The chip in the top bar is the only clock he can see once he has
+        # tapped into a drill, and it is on every screen for that reason.
+        client.force_login(will)
+        body = client.get(reverse("training:drill", args=[drill.slug])).content.decode()
+        assert 'id="clockchip"' in body
 
     def test_a_rep_drill_gets_a_counter(self, client, will, rep_drill):
         client.force_login(will)

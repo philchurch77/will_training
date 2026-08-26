@@ -26,6 +26,7 @@ REQUIRED_STAPLES = [
     "cone-slalom",
     "wall-pass-one-touch",
     "wall-control-inside",
+    "keepy-up-record",
     "laces-technique",
     "corner-placement",
     "juggling-laces",
@@ -60,8 +61,8 @@ BANNED_TRAINING = [
 
 
 class TestSeedShape:
-    def test_creates_between_36_and_50_drills(self, seeded):
-        assert 36 <= Drill.objects.count() <= 50
+    def test_creates_between_36_and_55_drills(self, seeded):
+        assert 36 <= Drill.objects.count() <= 55
 
     def test_creates_all_seven_skills(self, seeded):
         assert Skill.objects.count() == 7
@@ -174,6 +175,14 @@ class TestDrillQuality:
     def test_there_is_real_weak_foot_work(self, seeded):
         assert Drill.objects.filter(weak_foot=True).count() >= 6
 
+    def test_there_is_a_proper_spread_of_juggling(self, seeded):
+        """Juggling is on every day now, so the library has to carry enough of
+        it that he is not doing the same keepy-ups seven days a week."""
+        juggling = Drill.objects.filter(is_juggling=True)
+        assert juggling.count() >= 7
+        assert juggling.filter(difficulty=1).exists(), "nothing easy to start on"
+        assert juggling.filter(weak_foot=True).exists(), "no weak foot juggling"
+
     def test_there_are_fun_finishers(self, seeded):
         assert Drill.objects.filter(is_fun=True).count() >= 4
 
@@ -230,6 +239,25 @@ class TestWeeklyPlan:
             assert any(item.drill.weak_foot for item in day.items.all()), (
                 f"{day.get_weekday_display()} has no weak foot work"
             )
+
+    def test_every_session_includes_juggling(self, seeded):
+        """The brief: keepy-ups are a fixture, not an extra.
+
+        They are the one thing he will keep doing for the fun of it, and they
+        are pure first touch, so every session carries one.
+        """
+        for day in seeded.days.all():
+            if not day.is_required:
+                continue
+            assert any(item.drill.is_juggling for item in day.items.all()), (
+                f"{day.get_weekday_display()} has no juggling"
+            )
+
+    def test_no_session_is_mostly_juggling(self, seeded):
+        """One block. Juggling is not a substitute for the rest of the session."""
+        for day in seeded.days.all():
+            count = sum(1 for item in day.items.all() if item.drill.is_juggling)
+            assert count == 1, f"{day.get_weekday_display()} has {count}"
 
     def test_every_session_starts_with_a_warm_up(self, seeded):
         """The first drill is always short ball mastery on the floor."""
@@ -359,7 +387,7 @@ class TestIdempotency:
 
     def test_reset_rebuilds_cleanly(self, seeded):
         call_command("seed_drills", "--reset", verbosity=0)
-        assert 36 <= Drill.objects.count() <= 50
+        assert 36 <= Drill.objects.count() <= 55
         assert TrainingPlan.objects.filter(is_active=True).count() == 1
 
 

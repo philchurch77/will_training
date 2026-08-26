@@ -104,6 +104,9 @@ class Drill(models.Model):
     is_fun = models.BooleanField(
         default=False, help_text="A fun finisher or freestyle drill."
     )
+    is_juggling = models.BooleanField(
+        default=False, help_text="Juggling or keepy-ups. Every session has one."
+    )
     is_active = models.BooleanField(default=True)
 
     objects = DrillQuerySet.as_manager()
@@ -279,6 +282,51 @@ class SessionLog(models.Model):
         return self.drill.estimated_minutes
 
 
+class SessionClock(models.Model):
+    """How long the whole session actually took, on one day.
+
+    The drills themselves are no longer timed. Will starts one clock, works
+    through the six drills at whatever pace he likes - lingering on the ones he
+    is enjoying - and the clock is what says how long he trained. Ticking a
+    drill and finishing the session both post the elapsed seconds, and the
+    saved value only ever goes up, so replaying a stale value from the offline
+    queue cannot shrink a session that has since run on.
+
+    Days before this existed have no row here, and progress.py falls back to
+    the old sum-of-drill-estimates for them. That is deliberate: his history
+    keeps the totals it has always had.
+    """
+
+    # A garden session that claims to be longer than this is a phone left
+    # running on the kitchen table, not training.
+    MAX_SECONDS = 3 * 60 * 60
+
+    athlete = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="session_clocks",
+    )
+    date = models.DateField()
+    seconds = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["athlete", "date"], name="one_clock_per_day"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.date} ({self.minutes} min)"
+
+    @property
+    def minutes(self):
+        """Whole minutes, rounded. Anything under 30 seconds is not a session."""
+        return round(self.seconds / 60)
+
+
 class Badge(models.Model):
     """A milestone Will can earn."""
 
@@ -287,6 +335,7 @@ class Badge(models.Model):
     SKILLS_TRIED = "skills_tried"
     TOTAL_MINUTES = "total_minutes"
     WEAK_FOOT = "weak_foot"
+    JUGGLING = "juggling"
     PERFECT_WEEKS = "perfect_weeks"
     KIND_CHOICES = [
         (STREAK, "Day streak"),
@@ -294,6 +343,7 @@ class Badge(models.Model):
         (SKILLS_TRIED, "Skills tried"),
         (TOTAL_MINUTES, "Minutes trained"),
         (WEAK_FOOT, "Weak foot drills"),
+        (JUGGLING, "Juggling drills"),
         (PERFECT_WEEKS, "Perfect weeks"),
     ]
 

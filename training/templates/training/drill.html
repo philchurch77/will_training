@@ -14,6 +14,7 @@
       {{ drill.skill.name }}
     </span>
     {% if drill.weak_foot %}<span class="pill">Weak foot</span>{% endif %}
+    {% if drill.is_juggling %}<span class="pill">Juggling</span>{% endif %}
     {% for emoji, label in drill.equipment %}
       <span class="pill">{{ emoji }} {{ label }}</span>
     {% endfor %}
@@ -29,31 +30,33 @@
 
 <div class="card">
   {% if drill.is_timed %}
-    <div class="clock" id="clock" data-seconds="{{ drill.duration_minutes }}">
-      {{ drill.duration_minutes }}:00
-    </div>
-    <p class="center muted" id="clocknote">Tap start when you're ready</p>
-    <div class="btn-row">
-      <button class="btn" id="startstop" type="button">Start</button>
-      <button class="btn btn-quiet" id="reset" type="button">Reset</button>
-    </div>
+    {# No countdown. The session clock is running; this one is his to pace. #}
+    <p class="count-target">About {{ drill.duration_minutes }} minutes</p>
+    <p class="muted center" style="margin:0">
+      There's no timer on this one. Stay on it for as long as you're enjoying
+      it, then tick it off.
+    </p>
   {% else %}
-    <p class="count-target">Target: {{ drill.target_reps }}</p>
+    <p class="count-target">Today's target: {{ drill.target_reps }}</p>
     <div class="counter">
       <button class="count-btn" id="minus" type="button" aria-label="One less">&minus;</button>
       <div class="count-val" id="count" data-target="{{ drill.target_reps }}">0</div>
       <button class="count-btn" id="plus" type="button" aria-label="One more">+</button>
     </div>
+    <p class="muted center" id="countnote" style="margin:0">
+      Tap the plus every time you get one.
+    </p>
   {% endif %}
 </div>
 
 <form method="post" action="{% url 'training:drill_complete' drill.slug %}" id="doneform"
-      data-slug="{{ drill.slug }}">
+      data-offline data-slug="{{ drill.slug }}">
   {% csrf_token %}
-  <input type="hidden" name="actual_minutes" id="actual_minutes" value="">
   <input type="hidden" name="actual_reps" id="actual_reps" value="">
   <input type="hidden" name="rating" id="rating" value="">
   <input type="hidden" name="date" id="date" value="{% now 'Y-m-d' %}">
+  {# The session clock rides along with the tick, so the time is never lost. #}
+  <input type="hidden" name="session_seconds" class="js-clock-seconds" value="">
 
   <div class="card">
     <h3>How did that feel?</h3>
@@ -90,5 +93,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{% static 'training/js/timer.js' %}" defer></script>
+<script src="{% static 'training/js/drill.js' %}" defer></script>
 {% endblock %}

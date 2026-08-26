@@ -115,28 +115,35 @@
   // Try to drain anything left over from a previous visit.
   if (navigator.onLine) { flush(); }
 
-  // --- intercept the "I've finished this" form ---------------------------
-  var form = document.getElementById('doneform');
-  if (!form) { return; }
+  // --- intercept anything that must not be lost --------------------------
+  // Marked with data-offline: the tick on each row of Today, the "I've
+  // finished this" button on a drill, and the session clock's Finish. All
+  // three post to endpoints that are idempotent, so replaying one that did
+  // in fact land is harmless.
+  document.querySelectorAll('form[data-offline]').forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      if (navigator.onLine) { return; }  // online: let the normal POST happen
 
-  form.addEventListener('submit', function (event) {
-    if (navigator.onLine) { return; }  // online: let the normal POST happen
+      event.preventDefault();
+      var data = new FormData(form);
+      var body = {};
+      data.forEach(function (v, k) { body[k] = v; });
 
-    event.preventDefault();
-    var data = new FormData(form);
-    var body = {};
-    data.forEach(function (v, k) { body[k] = v; });
+      enqueue({ url: form.getAttribute('action'), body: body });
 
-    enqueue({ url: form.getAttribute('action'), body: body });
+      // Remember the tick locally so Today can show it straight away even
+      // though the server has not heard about it yet.
+      if (form.dataset.slug) {
+        try {
+          var pending = JSON.parse(localStorage.getItem('will-training-pending') || '{}');
+          pending[form.dataset.slug] = body.date;
+          localStorage.setItem('will-training-pending', JSON.stringify(pending));
+        } catch (e) { /* ignore */ }
+      }
 
-    // Remember it locally so Today can show the tick straight away even
-    // though the server has not heard about it yet.
-    try {
-      var pending = JSON.parse(localStorage.getItem('will-training-pending') || '{}');
-      pending[form.dataset.slug] = body.date;
-      localStorage.setItem('will-training-pending', JSON.stringify(pending));
-    } catch (e) { /* ignore */ }
-
-    window.location.href = '/?done=' + encodeURIComponent(form.dataset.slug);
+      window.location.href = form.dataset.slug
+        ? '/?done=' + encodeURIComponent(form.dataset.slug)
+        : '/';
+    });
   });
 })();

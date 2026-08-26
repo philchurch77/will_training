@@ -33,17 +33,31 @@
   </div>
 
 {% else %}
-  <div class="card card-hero">
+  {# One clock for the whole session. It counts up, and he decides when to stop. #}
+  <div class="card card-hero session" id="session"
+       data-today="{{ today|date:'Y-m-d' }}"
+       data-seconds="{{ summary.clock_seconds }}">
     <div class="hero-kicker">
-      {{ today|date:"l" }}
+      {{ today|date:"l" }} &middot; {{ summary.plan_day.label }}
       {% if summary.plan_day.is_optional %}&middot; bonus{% endif %}
     </div>
-    <h1 class="hero-big">
-      {% if summary.all_done %}Session done!{% else %}{{ summary.planned_minutes }} minutes{% endif %}
-    </h1>
-    <p class="hero-sub">
-      {{ summary.plan_day.label }}
-      &middot; {{ summary.done_count }}/{{ summary.total_count }} done
+
+    <div class="clock" id="clock">0:00</div>
+    <p class="clocknote" id="clocknote">Start the clock, then work down your list.</p>
+
+    <form method="post" action="{% url 'training:session_time' %}" id="clockform"
+          data-offline>
+      {% csrf_token %}
+      <input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+      <input type="hidden" name="seconds" class="js-clock-seconds" value="">
+      <div class="btn-row">
+        <button type="button" class="btn" id="clockstart">Start session</button>
+        <button type="button" class="btn btn-quiet" id="clockfinish" hidden>Finish</button>
+      </div>
+    </form>
+
+    <p class="hero-sub mt">
+      {{ summary.done_count }}/{{ summary.total_count }} drills done
       {% if streak %}&middot; {{ streak }} day streak
         <span class="flame" aria-hidden="true">&#128293;</span>{% endif %}
     </p>
@@ -61,23 +75,33 @@
 
   <ul class="drill-list">
     {% for row in summary.rows %}
-      <li>
-        <a class="drill-row {% if row.done %}is-done{% endif %}
-                  {% if just_done == row.drill.slug %}just-done{% endif %}"
-           href="{% url 'training:drill' row.drill.slug %}">
-          <span class="tick" aria-hidden="true">&#10003;</span>
-          <span class="drill-main">
-            <span class="drill-name">{{ row.drill.name }}</span>
-            <span class="drill-meta">
-              <span>{{ row.drill.target_label }}</span>
-              <span class="kit" aria-hidden="true">
-                {% for emoji, label in row.drill.equipment %}{{ emoji }}{% endfor %}
-              </span>
-              {% if row.drill.weak_foot %}<span>weak foot</span>{% endif %}
+      <li class="drill-row {% if row.done %}is-done{% endif %}
+                 {% if just_done == row.drill.slug %}just-done{% endif %}">
+        {% if row.done %}
+          <span class="tick" role="img" aria-label="Done">&#10003;</span>
+        {% else %}
+          {# Tick it from here without opening it - the drill page is for reading. #}
+          <form method="post" class="tickform" data-offline data-slug="{{ row.drill.slug }}"
+                action="{% url 'training:drill_complete' row.drill.slug %}">
+            {% csrf_token %}
+            <input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+            <input type="hidden" name="session_seconds" class="js-clock-seconds" value="">
+            <button type="submit" class="tick tick-btn"
+                    aria-label="Tick off {{ row.drill.name }}">&#10003;</button>
+          </form>
+        {% endif %}
+        <a class="drill-main" href="{% url 'training:drill' row.drill.slug %}">
+          <span class="drill-name">{{ row.drill.name }}</span>
+          <span class="drill-meta">
+            <span>{{ row.drill.skill.name }}</span>
+            {% if not row.drill.is_timed %}<span>{{ row.drill.target_label }}</span>{% endif %}
+            {% if row.drill.weak_foot %}<span>weak foot</span>{% endif %}
+            <span class="kit" aria-hidden="true">
+              {% for emoji, label in row.drill.equipment %}{{ emoji }}{% endfor %}
             </span>
           </span>
-          <span class="chev" aria-hidden="true">&rsaquo;</span>
         </a>
+        <span class="chev" aria-hidden="true">&rsaquo;</span>
       </li>
     {% endfor %}
   </ul>
@@ -86,7 +110,14 @@
     <div class="card center">
       <p style="font-size:52px;margin:0">&#127881;</p>
       <h2>Everything ticked off</h2>
-      <p class="muted">Great session. See you tomorrow.</p>
+      <p class="muted">
+        {% if summary.clock_minutes %}
+          {{ summary.clock_minutes }} minutes of work. Tap finish on the clock
+          when you're done.
+        {% else %}
+          Great session. See you tomorrow.
+        {% endif %}
+      </p>
       <a class="btn mt" href="{% url 'training:progress' %}">See my progress</a>
     </div>
   {% endif %}

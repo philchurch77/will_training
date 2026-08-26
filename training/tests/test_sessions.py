@@ -153,3 +153,100 @@ class TestBadgeAwardOnCompletion:
         client.post(url)
 
         assert EarnedBadge.objects.filter(athlete=will).count() == 1
+
+
+class TestSessionClock:
+    """One clock for the whole session, instead of a countdown per drill.
+
+    The rule that matters here is that the saved value only ever goes up. A
+    tick queued in the garden can arrive after the session has run on, and it
+    must not rewind the clock it rode in on.
+    """
+
+    def test_finishing_a_session_saves_the_time(self, logged_in, will, plan):
+        from datetime import date
+
+        from django.utils import timezone
+
+        from training.models import SessionClock
+
+        response = logged_in.post(
+            reverse("training:session_time"), {"seconds": "1500"}
+        )
+        assert response.status_code == 302
+
+        clock = SessionClock.objects.get(athlete=will, date=timezone.localdate())
+        assert clock.seconds == 1500
+        assert clock.minutes == 25
+        assert isinstance(clock.date, date)
+
+    def test_a_tick_carries_the_clock_with_it(self, logged_in, will, plan, drill):
+        """He might spend twenty minutes on the drill he is enjoying and tick
+        nothing until the end, so every tick banks the time too."""
+        from django.utils import timezone
+
+        from training.models import SessionClock
+
+        logged_in.post(
+            reverse("training:drill_complete", args=[drill.slug]),
+            {"session_seconds": "900"},
+        )
+        clock = SessionClock.objects.get(athlete=will, date=timezone.localdate())
+        assert clock.seconds == 900
+
+    def test_the_clock_only_ever_goes_up(self, logged_in, will, plan):
+        from django.utils import timezone
+
+        from training.models import SessionClock
+
+        url = reverse("training:session_time")
+        logged_in.post(url, {"seconds": "1800"})
+        logged_in.post(url, {"seconds": "300"})  # a stale queued value
+
+        clock = SessionClock.objects.get(athlete=will, date=timezone.localdate())
+        assert clock.seconds == 1800
+
+    def test_one_clock_per_day(self, logged_in, will, plan):
+        from training.models import SessionClock
+
+        url = reverse("training:session_time")
+        logged_in.post(url, {"seconds": "600"})
+        logged_in.post(url, {"seconds": "1200"})
+        assert SessionClock.objects.filter(athlete=will).count() == 1
+
+    def test_a_forgotten_clock_is_capped(self, logged_in, will, plan):
+        """A phone left running on the kitchen table is not a nine hour session."""
+        from training.models import SessionClock
+
+        logged_in.post(reverse("training:session_time"), {"seconds": "99999"})
+        clock = SessionClock.objects.get(athlete=will)
+        assert clock.seconds == SessionClock.MAX_SECONDS
+
+    def test_nonsense_is_ignored_without_losing_the_tick(
+        self, logged_in, will, plan, drill
+    ):
+        from training.models import SessionClock, SessionLog
+
+        logged_in.post(
+            reverse("training:drill_complete", args=[drill.slug]),
+            {"session_seconds": "banana"},
+        )
+        assert SessionLog.objects.filter(athlete=will, drill=drill).exists()
+        assert not SessionClock.objects.filter(athlete=will).exists()
+
+    def test_a_queued_clock_lands_on_the_day_it_was_made(self, logged_in, will, plan):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from training.models import SessionClock
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+        logged_in.post(
+            reverse("training:session_time"),
+            {"seconds": "1200", "date": yesterday.isoformat()},
+        )
+        assert SessionClock.objects.get(athlete=will).date == yesterday
+
+    def test_get_is_not_allowed(self, logged_in, plan):
+        assert logged_in.get(reverse("training:session_time")).status_code == 405

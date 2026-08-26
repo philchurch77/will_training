@@ -22,6 +22,8 @@
   <div class="topbar-in">
     <span class="topbar-title">{% block heading %}{% endblock %}</span>
     {% if user.is_authenticated and not request.in_coach %}
+      {# The session clock, so it is still visible from inside a drill. #}
+      <span class="clockchip" id="clockchip" data-today="{% now 'Y-m-d' %}" hidden></span>
       {# Deliberately understated: this is Dad's door, not part of Will's app. #}
       <a class="linkbtn" href="{% url 'training:coach_plan' %}">Coach</a>
     {% endif %}
@@ -72,5 +74,6 @@
 {% endif %}
 
 <script src="{% static 'training/js/app.js' %}" defer></script>
+<script src="{% static 'training/js/session.js' %}" defer></script>
 {% block scripts %}{% endblock %}
 </body>

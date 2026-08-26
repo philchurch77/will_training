@@ -8,7 +8,7 @@ month ends and rest days is provable.
 from datetime import timedelta
 
 
-from .models import Badge, EarnedBadge, SessionLog, Skill, TrainingPlan
+from .models import Badge, EarnedBadge, SessionClock, SessionLog, Skill, TrainingPlan
 
 # How far back current_streak() will walk before giving up. A 9-year-old is not
 # going to beat this, and it stops a pathological loop if data goes strange.
@@ -119,6 +119,12 @@ def drills_completed(athlete):
     return SessionLog.objects.filter(athlete=athlete, completed=True).count()
 
 
+def juggling_sessions(athlete):
+    return SessionLog.objects.filter(
+        athlete=athlete, completed=True, drill__is_juggling=True
+    ).count()
+
+
 def weak_foot_sessions(athlete):
     return SessionLog.objects.filter(
         athlete=athlete, completed=True, drill__weak_foot=True
@@ -134,13 +140,50 @@ def skills_tried(athlete):
     )
 
 
+def clocked_minutes(athlete):
+    """date -> minutes the session clock actually recorded, for days it ran."""
+    return {
+        row.date: row.minutes
+        for row in SessionClock.objects.filter(athlete=athlete, seconds__gt=0)
+    }
+
+
+def _minutes_per_log(athlete, since=None):
+    """Yield (log, minutes) for every completed drill.
+
+    There are two ways a day can be measured, and this is the only place that
+    knows the difference:
+
+    * He ran the session clock. The day is worth what the clock says, shared
+      out across the drills he ticked in proportion to their planned length.
+      The total and the per-skill chart then tell the same story.
+    * He did not - which is every day before the clock existed. Each drill is
+      worth its planned length, exactly as it always was, so his history keeps
+      the totals it has always had.
+
+    Clock time on a day with no ticks counts for nothing. A phone left running
+    in the kitchen is not a session.
+    """
+    logs = SessionLog.objects.filter(athlete=athlete, completed=True)
+    if since is not None:
+        logs = logs.filter(date__gte=since)
+    logs = list(logs.select_related("drill", "drill__skill"))
+
+    clocked = clocked_minutes(athlete)
+    planned = {}
+    for log in logs:
+        planned[log.date] = planned.get(log.date, 0) + log.minutes_counted
+
+    for log in logs:
+        actual = clocked.get(log.date)
+        if actual and planned[log.date]:
+            yield log, actual * log.minutes_counted / planned[log.date]
+        else:
+            yield log, log.minutes_counted
+
+
 def total_minutes(athlete):
-    return sum(
-        log.minutes_counted
-        for log in SessionLog.objects.filter(
-            athlete=athlete, completed=True
-        ).select_related("drill")
-    )
+    return round(sum(minutes for _log, minutes in _minutes_per_log(athlete)))
 
 
 def _required_drills_by_weekday(plan=None):
@@ -213,20 +256,16 @@ def minutes_by_skill(athlete, since=None):
     chart.
     """
 
-    logs = SessionLog.objects.filter(athlete=athlete, completed=True)
-    if since is not None:
-        logs = logs.filter(date__gte=since)
-
     totals = {}
-    for log in logs.select_related("drill", "drill__skill"):
-        totals[log.drill.skill_id] = totals.get(log.drill.skill_id, 0) + log.minutes_counted
+    for log, minutes in _minutes_per_log(athlete, since=since):
+        totals[log.drill.skill_id] = totals.get(log.drill.skill_id, 0) + minutes
 
     rows = []
     for skill in Skill.objects.all():
         rows.append(
             {
                 "skill": skill,
-                "minutes": totals.get(skill.id, 0),
+                "minutes": round(totals.get(skill.id, 0)),
             }
         )
     peak = max([row["minutes"] for row in rows], default=0)
@@ -267,6 +306,7 @@ def _badge_values(athlete, today):
         Badge.SKILLS_TRIED: skills_tried(athlete),
         Badge.TOTAL_MINUTES: total_minutes(athlete),
         Badge.WEAK_FOOT: weak_foot_sessions(athlete),
+        Badge.JUGGLING: juggling_sessions(athlete),
         Badge.PERFECT_WEEKS: perfect_weeks(athlete, today),
     }
 
@@ -290,6 +330,38 @@ def award_badges(athlete, today):
             EarnedBadge.objects.create(athlete=athlete, badge=badge, earned_on=today)
             newly.append(badge)
     return newly
+
+
+def record_session_seconds(athlete, day, seconds):
+    """Save how long today's session has been running.
+
+    Only ever upwards. The clock is posted with every tick as well as by the
+    Finish button, and a tick queued offline can arrive long after the session
+    has moved on, so the later, larger value must win. Nonsense is clamped
+    rather than rejected: a stuck clock should not lose him the tick it rode
+    in on.
+    """
+    try:
+        seconds = int(seconds)
+    except (TypeError, ValueError):
+        return None
+    seconds = max(0, min(seconds, SessionClock.MAX_SECONDS))
+    if seconds <= 0:
+        return None
+
+    clock, created = SessionClock.objects.get_or_create(
+        athlete=athlete, date=day, defaults={"seconds": seconds}
+    )
+    if not created and seconds > clock.seconds:
+        clock.seconds = seconds
+        clock.save(update_fields=["seconds", "updated_at"])
+    return clock
+
+
+def session_seconds(athlete, day):
+    """Seconds already banked for a day - the floor the phone's clock starts from."""
+    clock = SessionClock.objects.filter(athlete=athlete, date=day).first()
+    return clock.seconds if clock else 0
 
 
 def session_for(day, plan=None):
@@ -321,6 +393,7 @@ def today_summary(athlete, today):
         {"drill": drill, "done": drill.slug in done_slugs} for drill in drills
     ]
     planned_minutes = sum(drill.estimated_minutes for drill in drills)
+    clock = session_seconds(athlete, today)
     return {
         "plan_day": plan_day,
         "rows": rows,
@@ -329,4 +402,9 @@ def today_summary(athlete, today):
         "total_count": len(rows),
         "all_done": bool(rows) and all(row["done"] for row in rows),
         "planned_minutes": plan_day.target_minutes if plan_day else planned_minutes,
+        # What the server already knows about today's clock. The phone holds
+        # the running state; this is the floor it starts from, so a reload or
+        # a second device cannot rewind the session.
+        "clock_seconds": clock,
+        "clock_minutes": round(clock / 60),
     }

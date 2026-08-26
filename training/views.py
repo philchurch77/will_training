@@ -166,6 +166,11 @@ def drill_complete(request, slug):
     reps = _parse_int(request.POST.get("actual_reps"), lo=0, hi=10000)
 
     with transaction.atomic():
+        # Every tick carries the session clock with it, so the time is banked
+        # even if he never taps Finish.
+        progress.record_session_seconds(
+            athlete, day, request.POST.get("session_seconds")
+        )
         log, _created = SessionLog.objects.update_or_create(
             athlete=athlete,
             date=day,
@@ -206,6 +211,24 @@ def drill_uncomplete(request, slug):
     drill = get_object_or_404(Drill, slug=slug)
     athlete = request.user
     SessionLog.objects.filter(athlete=athlete, date=_today(), drill=drill).delete()
+    return redirect("training:today")
+
+
+@login_required
+@require_POST
+def session_time(request):
+    """Bank the session clock: the Finish button, and a best-effort save on pause.
+
+    Separate from ticking a drill because he might train for twenty minutes on
+    the one drill he is enjoying and tick nothing until the end.
+    """
+    day = _parse_date(request.POST.get("date")) or _today()
+    clock = progress.record_session_seconds(
+        request.user, day, request.POST.get("seconds")
+    )
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({"ok": True, "seconds": clock.seconds if clock else 0})
     return redirect("training:today")
 
 
@@ -474,7 +497,8 @@ def _precache_urls():
         reverse("training:offline"),
         static("training/css/app.css"),
         static("training/js/app.js"),
-        static("training/js/timer.js"),
+        static("training/js/drill.js"),
+        static("training/js/session.js"),
         # The manifest and icons too: an installed app that is opened offline
         # still asks for these, and a miss shows the browser's default icon.
         reverse("manifest"),

@@ -1,8 +1,8 @@
 # Will's Training
 
 A small football training app for Will (9). He opens it on his phone, sees the
-day's session, taps each drill off as he does it, and watches his streak and
-badges build up. One profile, one 4-digit code, and no personal data beyond a
+day's session, starts the clock, taps each drill off as he does it, and
+watches his streak and badges build up. One profile, one 4-digit code, and no personal data beyond a
 first name.
 
 Django 5.2 + SQLite. No CDN, no build step, no JavaScript framework.
@@ -18,7 +18,7 @@ py -3.13 -m pip install uv     # once
 uv venv
 uv sync
 uv run manage.py migrate
-uv run manage.py seed_drills   # 45 drills, the weekly plan, badges, profile
+uv run manage.py seed_drills   # 50 drills, the weekly plan, badges, profile
 uv run manage.py runserver
 ```
 
@@ -197,7 +197,9 @@ There is no academy and there are no matches over the summer, so all seven days
 are full sessions of the same 30 minutes and every one of them counts towards
 the streak. Every drill is five minutes, so a day is simply six of them: a
 ball-mastery warm-up on the floor, four technical drills, then a fun finisher.
-Every session includes explicit weak-foot work.
+Every session includes explicit weak-foot work, and every session includes
+juggling - usually as the finisher, because keepy-ups are the one thing he will
+keep doing for the fun of it.
 
 Speed sits on three of those days — Tuesday, Thursday and Saturday. It is the
 one thing in the app that tires him rather than teaches him, so no session
@@ -211,6 +213,25 @@ When the season restarts, put Friday and Saturday back to **Optional** in Coach
 (or set `is_optional` on weekdays 4 and 5 in `PLAN_DAYS`) and trim their targets:
 academy and match days should carry no required work.
 
+### How the session clock works
+
+**One clock for the whole session, not a countdown per drill.** He taps *Start
+session* on Today, works down the list at his own pace, and taps *Finish* at the
+end. The clock keeps running while he is inside a drill - it shows in the top
+bar - so there is nothing telling him to stop doing the thing he is enjoying.
+That was the point of the change: a five-minute countdown on a drill he liked
+was what made him put the phone down.
+
+The drills still say roughly how long they are meant to take, and that is all it
+is now: a guide for planning the week, not a stopwatch pointed at him.
+
+**Minutes on the Progress screen come from that clock.** On a day he ran it, the
+day is worth what the clock says, shared across the drills he ticked. On a day
+he did not - which is every day before this existed - each drill is worth its
+planned length, exactly as before, so his history never moves. Clock time on a
+day with no ticks counts for nothing, and a clock left running is capped at
+three hours.
+
 ### How the streak works
 
 A day counts once he has ticked **any one drill** — one is enough to keep it
@@ -223,7 +244,7 @@ never reads zero first thing in the morning.
 
 ## The drills
 
-45 drills across seven skills: Ball mastery, Dribbling, Passing, Shooting,
+50 drills across seven skills: Ball mastery, Dribbling, Passing, Shooting,
 First touch, 1v1 and Speed. Every one of them:
 
 - can be done **alone**, in a garden or a park — a wall stands in for a passing
@@ -248,7 +269,7 @@ any.
 config/           settings, urls
 training/
   models.py       Skill, Drill, TrainingPlan, PlanDay, PlanDrill,
-                  SessionLog, Badge, EarnedBadge
+                  SessionLog, SessionClock, Badge, EarnedBadge
   progress.py     streaks, stats and badge awarding (pure functions)
   views.py        every screen, function-based
   forms.py        the two coach forms
@@ -293,5 +314,5 @@ single colour rather than seven; the skill names are on the bars.
 The test suite covers the models, the streak rules, session completion and
 access to the coach area — and `tests/test_seed.py` asserts the coaching principles
 themselves, so if a future edit sneaks in a drill needing a partner, or lets a
-session creep past 30 minutes, or drops the weak-foot work from a day, or piles
-two sprint blocks into one session, the tests say so.
+session creep past 30 minutes, or drops the weak-foot work or the juggling
+from a day, or piles two sprint blocks into one session, the tests say so.

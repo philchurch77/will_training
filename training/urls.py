@@ -15,6 +15,7 @@ urlpatterns = [
     path("drill/<slug:slug>/", views.drill_detail, name="drill"),
     path("drill/<slug:slug>/done/", views.drill_complete, name="drill_complete"),
     path("drill/<slug:slug>/undo/", views.drill_uncomplete, name="drill_uncomplete"),
+    path("session/time/", views.session_time, name="session_time"),
     path("offline/", views.offline, name="offline"),
     # Coach (staff only)
     path("coach/", views.coach_plan, name="coach_plan"),

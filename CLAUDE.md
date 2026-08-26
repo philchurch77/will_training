@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 179 tests, ~70s
+uv run pytest                    # 197 tests, ~75s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -41,7 +41,7 @@ introduce one.
 ```
 config/settings.py    dev defaults; every production knob is an env var
 training/models.py    Skill, Drill, TrainingPlan, PlanDay, PlanDrill,
-                      SessionLog, Badge, EarnedBadge
+                      SessionLog, SessionClock, Badge, EarnedBadge
 training/progress.py  streaks, stats, badge awarding — pure functions
 training/throttle.py  login rate limiting, cache-backed
 training/views.py     every screen, function-based
@@ -54,9 +54,30 @@ Function-based views on purpose: one maintainer, re-read in a year.
 
 - **`Drill` is minutes XOR reps**, enforced by a `CheckConstraint` and by
   `clean()`. Creating one with both or neither raises `IntegrityError`.
+- **The session is timed, never the drill.** One clock on Today counts *up*
+  for the whole session (`static/training/js/session.js`, state in
+  `localStorage` so it survives navigating into a drill and back). Per-drill
+  countdowns were removed on purpose: a clock running down on the drill he was
+  enjoying is what made him stop. Do not put one back.
+- **`SessionClock` is the source of truth for minutes, when it exists.**
+  `progress._minutes_per_log()` is the only place that knows the rule: a day he
+  clocked is worth what the clock says, shared across the drills he ticked; a
+  day he did not is worth the sum of the drills' planned lengths, which is what
+  every day before the clock existed still computes. Never make the clock
+  authoritative for days without one - that would silently rewrite his history.
+  Clock seconds only ever move up, and a day with no ticks is worth nothing.
+- **Every session carries exactly one juggling block**, flagged by
+  `Drill.is_juggling` and asserted in `test_seed.py`. Keepy-ups are the thing
+  he will do for the fun of it and they are pure touch work.
 - **`SessionLog` is unique on `(athlete, date, drill)`.** This is what makes
   completion idempotent, which is what lets a tick queued offline be replayed
   safely. Do not relax it without replacing the offline queue.
+- **Ticks happen from the Today list, not just the drill page.** Each undone
+  row is a form posting to `drill_complete`; the drill page is for reading the
+  instructions. Every one of those forms carries `session_seconds`, so the
+  clock is banked even if he never taps Finish. Done rows show a plain tick and
+  no button - unticking is on the drill page, where it cannot happen by
+  accident in his pocket.
 - **Rest days and optional days never break a streak.** `progress.day_state()`
   returns `rest` for them and the streak walk skips over them. Today not being
   done yet also does not break the streak. Preseason there are no optional days
@@ -115,7 +136,9 @@ days and every day counts towards the streak. 210 minutes a week. Phil chose
 this knowingly after being told it is a high load; do not quietly reduce it.
 
 **Every drill is five minutes, so a day is six of them:** a ball-mastery
-warm-up, four technical drills, a fun finisher. Rep-based drills count as five
+warm-up, four technical drills, a fun finisher - and one of those six is
+always juggling. Five minutes is now a planning figure rather than something he
+is held to: the session clock is what he actually runs against. Rep-based drills count as five
 minutes too (`Drill.estimated_minutes`), so the sum is 30 whatever mix a day is
 built from and rebalancing means swapping a drill, not doing arithmetic. That
 is the whole reason for the five-minute cap — keep it.
@@ -134,6 +157,8 @@ Built for a 9-year-old on a phone, outdoors:
 
 - Large tap targets (64px minimum), high contrast, minimal text.
 - **No dropdowns and no typing anywhere except the PIN pad** on Will's screens.
+- **Nothing counts down at him.** The one clock in the app counts up and he
+  decides when it stops.
   Coach screens may use ordinary form controls.
 - Palette is white, grey and blue. Contrast ratios were measured, not eyeballed:
   body text ≥5:1, accent `#1667c9` at 5.5:1 on white. Keep it that way — he
@@ -160,6 +185,8 @@ screen he cannot get past with no signal.
 Service workers only register over **HTTPS or on localhost**. On a plain-http
 LAN address the app works but caches nothing. On Render it is HTTPS, so offline
 works there.
+
+`session.js` and `drill.js` are both precached (see `_precache_urls`).
 
 Bump `CACHE` in `training/templates/training/sw.js` when static assets change —
 filenames are not content-hashed.

@@ -114,6 +114,38 @@ class TestMonthlyAndTotals:
         tick(will, rep_drill, MONDAY)  # no actual -> 5 minute default
         assert progress.total_minutes(will) == 13
 
+    def test_the_session_clock_decides_what_a_day_was_worth(
+        self, will, plan, drill, rep_drill
+    ):
+        """He trained for 45 minutes on a day the plan called 10. The clock is
+        what actually happened, so the clock is what counts."""
+        from training.models import SessionClock
+
+        tick(will, drill, MONDAY)
+        tick(will, rep_drill, MONDAY)
+        SessionClock.objects.create(athlete=will, date=MONDAY, seconds=45 * 60)
+
+        assert progress.total_minutes(will) == 45
+
+    def test_a_day_before_the_clock_existed_keeps_its_old_total(
+        self, will, plan, drill, rep_drill
+    ):
+        """The whole point of the fallback: his history does not move."""
+        from training.models import SessionClock
+
+        tick(will, drill, MONDAY, actual_minutes=8)
+        tick(will, drill, TUESDAY)
+        SessionClock.objects.create(athlete=will, date=TUESDAY, seconds=20 * 60)
+
+        # Monday: 8, as it always was. Tuesday: 20, from the clock.
+        assert progress.total_minutes(will) == 28
+
+    def test_clock_time_on_a_day_with_no_ticks_counts_for_nothing(self, will, plan):
+        from training.models import SessionClock
+
+        SessionClock.objects.create(athlete=will, date=MONDAY, seconds=60 * 60)
+        assert progress.total_minutes(will) == 0
+
     def test_drills_completed_counts_every_row(self, will, plan, drill, rep_drill):
         tick(will, drill, MONDAY)
         tick(will, rep_drill, MONDAY)
@@ -134,6 +166,26 @@ class TestMinutesBySkill:
         # The busiest skill fills the bar; the neglected one shows empty.
         assert by_name["Ball mastery"]["percent"] == 100
         assert by_name["Shooting"]["percent"] == 0
+
+    def test_the_chart_and_the_total_tell_the_same_story(
+        self, will, plan, drill, rep_drill
+    ):
+        """A clocked day is shared out across the drills he ticked, so the bars
+        add up to the total on the same screen."""
+        from training.models import Skill, SessionClock
+
+        other = Skill.objects.create(name="Shooting", slug="shooting", order=2)
+        rep_drill.skill = other
+        rep_drill.save()
+
+        tick(will, drill, MONDAY)       # 5 planned minutes
+        tick(will, rep_drill, MONDAY)   # 5 planned minutes
+        SessionClock.objects.create(athlete=will, date=MONDAY, seconds=40 * 60)
+
+        rows = {r["skill"].name: r["minutes"] for r in progress.minutes_by_skill(will)}
+        assert rows["Ball mastery"] == 20
+        assert rows["Shooting"] == 20
+        assert sum(rows.values()) == progress.total_minutes(will)
 
     def test_all_zero_does_not_divide_by_zero(self, will, plan, drill):
         rows = progress.minutes_by_skill(will)

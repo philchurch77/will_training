@@ -9,6 +9,8 @@ Coaching principles baked into this data, for a 9-year-old in academy football:
 * Both feet feature everywhere, and every session has explicit weak-foot work.
 * Short speed work is in - accelerations, a first touch and a burst after it,
   a dribble at full pelt. No weights, no plyometrics, no distance running.
+* Every session includes juggling. Keepy-ups are the drill he will do for
+  the fun of it, and they are pure first touch.
 * Nothing lasts longer than five minutes. Each session is a warm-up, four
   technical drills and a fun finisher, and lands on exactly 30 minutes.
 * Instructions are written for Will to read himself.
@@ -225,6 +227,56 @@ DRILLS = [
         "best run. Write the number down and try to beat it next week.",
         "Beat your best",
         5, None, "b", 2, False, True,
+    ),
+    (
+        "juggle-and-catch",
+        "Juggle and catch",
+        "first-touch",
+        "Drop the ball onto your foot, flick it up once, then catch it. When "
+        "one is easy, catch it after two flicks, then three. Every juggler "
+        "starts here.",
+        "One more than last time",
+        None, 25, "b", 1, False, False,
+    ),
+    (
+        "alternate-foot-juggles",
+        "Left, right, left, right",
+        "first-touch",
+        "Juggle swapping feet every single touch - left, right, left, right. "
+        "Your weaker foot gets exactly as many goes as your good one, which is "
+        "the whole point. Count out loud as you go.",
+        "Every other touch, weak foot",
+        None, 20, "b", 2, True, False,
+    ),
+    (
+        "low-juggles",
+        "Low juggles",
+        "first-touch",
+        "Juggle keeping the ball below your knee, with tiny soft touches. Low "
+        "and slow is much harder than big bouncy ones, and it is what teaches "
+        "your feet to be gentle. See how long you can keep it small.",
+        "Small touches, ball stays low",
+        None, 20, "b", 2, False, False,
+    ),
+    (
+        "juggle-and-volley",
+        "Juggle and volley",
+        "first-touch",
+        "Juggle the ball a few times, then volley it against the wall out of "
+        "the air. Collect the rebound and start again. Do five finishing with "
+        "your right foot and five with your left.",
+        "Watch it onto your laces",
+        5, None, "b w s", 3, False, True,
+    ),
+    (
+        "around-the-world",
+        "Around the world",
+        "first-touch",
+        "Flick the ball up and swing your foot all the way around it before you "
+        "touch it again. You will miss loads at first and that is fine - it is "
+        "a showing-off trick. Land one and you have earned bragging rights.",
+        "Big swing, then catch it",
+        5, None, "b s", 3, False, True,
     ),
     # --- Dribbling -------------------------------------------------------
     (
@@ -506,6 +558,21 @@ DRILLS = [
     ),
 ]
 
+# Juggling and keepy-ups. Every session carries exactly one, so it needs to be
+# a flag the plan and the tests can see - the same job weak_foot does. Kept as
+# a set of slugs rather than a thirteenth column on fifty tuples.
+JUGGLING = {
+    "juggling-laces",
+    "thigh-juggles",
+    "weak-foot-juggles",
+    "keepy-up-record",
+    "juggle-and-catch",
+    "alternate-foot-juggles",
+    "low-juggles",
+    "juggle-and-volley",
+    "around-the-world",
+}
+
 # weekday -> (label, target_minutes, is_rest, is_optional, [drill slugs in order])
 #
 # PRESEASON SHAPE: seven full sessions of exactly 30 minutes. There is no
@@ -522,6 +589,11 @@ DRILLS = [
 # thing here that tires him rather than teaches him, so it is spaced out and
 # never doubled up in a session. Every day still carries explicit weak-foot
 # work.
+#
+# Every day also carries exactly one juggling block, most of them in the fun
+# finisher slot at the end. Keepy-ups are the one thing he will keep doing for
+# their own sake, and they are pure touch practice - so they are a fixture of
+# the session rather than something he might get round to.
 PLAN_NAME = "Will's Week"
 PLAN_DAYS = [
     (0, "Ball mastery + first touch", 30, False, False, [
@@ -530,11 +602,11 @@ PLAN_DAYS = [
     ]),
     (1, "Dribbling + speed", 30, False, False, [
         "rollovers", "cone-slalom", "step-over", "speed-dribble-gate",
-        "cruyff-past-cone", "freestyle-five",
+        "cruyff-past-cone", "around-the-world",
     ]),
     (2, "Passing + shooting", 30, False, False, [
         "sole-rolls", "weak-foot-wall-pass", "wall-pass-one-touch",
-        "laces-technique", "corner-placement", "wall-target-challenge",
+        "laces-technique", "corner-placement", "juggle-and-volley",
     ]),
     (3, "First touch + speed", 30, False, False, [
         "figure-eight-legs", "first-touch-turn", "first-touch-and-go",
@@ -546,7 +618,7 @@ PLAN_DAYS = [
     ]),
     (5, "Shooting + speed", 30, False, False, [
         "weak-foot-taps", "turn-and-shoot", "low-driven-shot",
-        "bouncing-control", "drag-back-escape", "beat-the-clock",
+        "alternate-foot-juggles", "drag-back-escape", "beat-the-clock",
     ]),
     (6, "Weak foot + freestyle", 30, False, False, [
         "sole-rolls", "weak-foot-finish", "cone-slalom", "weak-foot-control",
@@ -575,13 +647,15 @@ BADGES = [
      Badge.TOTAL_MINUTES, 500, 9),
     ("weak-foot-25", "Two footed", "Twenty five weak foot drills done.",
      "\U0001f9a6", Badge.WEAK_FOOT, 25, 10),
+    ("juggling-25", "Keepy-up king", "Twenty five juggling drills done.",
+     "\U0001f939", Badge.JUGGLING, 25, 11),
     # The two at the end are the long game. Everything above is reachable in
     # a month of preseason; these are still there to chase afterwards.
     ("perfect-week", "Perfect week",
      "Every drill, on every training day, for a whole week.",
-     "\U0001f48e", Badge.PERFECT_WEEKS, 1, 11),  # not the passing dartboard
+     "\U0001f48e", Badge.PERFECT_WEEKS, 1, 12),  # not the passing dartboard
     ("streak-100", "Century", "One hundred days in a row.", "\U0001f4af",
-     Badge.STREAK, 100, 12),
+     Badge.STREAK, 100, 13),
 ]
 
 
@@ -656,6 +730,7 @@ class Command(BaseCommand):
                     "difficulty": difficulty,
                     "weak_foot": weak_foot,
                     "is_fun": is_fun,
+                    "is_juggling": slug in JUGGLING,
                     "is_active": True,
                 },
             )
