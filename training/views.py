@@ -189,16 +189,24 @@ def drill_complete(request, slug):
         progress.record_session_seconds(
             athlete, day, request.POST.get("session_seconds")
         )
+        # Only write what this request actually carried. The tick on the
+        # Today list posts no count and no rating, and it must not wipe the 30
+        # he counted on the drill page ten minutes earlier - which is the
+        # number his record is made of.
+        defaults = {"completed": True}
+        if rating is not None:
+            defaults["rating"] = rating
+        if drill.is_timed:
+            defaults["actual_reps"] = None
+            if minutes is not None:
+                defaults["actual_minutes"] = minutes
+        else:
+            defaults["actual_minutes"] = None
+            if reps is not None:
+                defaults["actual_reps"] = reps
+
         log, _created = SessionLog.objects.update_or_create(
-            athlete=athlete,
-            date=day,
-            drill=drill,
-            defaults={
-                "completed": True,
-                "actual_minutes": minutes if drill.is_timed else None,
-                "actual_reps": reps if not drill.is_timed else None,
-                "rating": rating,
-            },
+            athlete=athlete, date=day, drill=drill, defaults=defaults
         )
         new_badges = progress.award_badges(athlete, day)
 
@@ -449,6 +457,29 @@ def coach_drill_edit(request, slug=None):
     return render(
         request, "training/coach/drill_form.html", {"form": form, "drill": drill}
     )
+
+
+@coach_required
+@require_POST
+def coach_log_edit(request, pk):
+    """Correct what a session recorded. Blank the box to rub the number out.
+
+    A count nobody watched him make can end up on his record board for ever,
+    so it has to be fixable. Only the number changes: deleting the row would
+    say he never did the drill at all, which would move his streak and his
+    badges, and a wrong score is not worth rewriting his history over.
+    """
+    athlete = get_athlete()
+    log = get_object_or_404(SessionLog, pk=pk, athlete=athlete)
+
+    # Counts only. Nothing records per-drill minutes any more - the ones on
+    # old rows are leftovers from the timer that was removed, kept because his
+    # lifetime minutes are still counted from them.
+    if not log.drill.is_timed:
+        log.actual_reps = _parse_int(request.POST.get("reps"), lo=0, hi=10000)
+        log.save(update_fields=["actual_reps"])
+
+    return redirect("training:coach_logs")
 
 
 @coach_required

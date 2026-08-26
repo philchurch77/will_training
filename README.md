@@ -263,7 +263,11 @@ beating one puts a trophy card on Today. **My records** on the Progress screen i
 the whole board, biggest number first.
 
 Those scores were already being written to the database and never shown back to
-him, which is the one thing that makes a rep drill worth doing twice.
+him, which is the one thing that makes a rep drill worth doing twice — and it
+means the board can open with a number nobody remembers him setting. Any count
+is editable on **Coach → His sessions**: change it and tick to save, or empty
+the box to rub it out. The session itself always stays, so his streak and his
+badges never move.
 
 ### How the streak works
 

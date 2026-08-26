@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 227 tests, ~85s
+uv run pytest                    # 236 tests, ~88s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -102,6 +102,16 @@ Function-based views on purpose: one maintainer, re-read in a year.
   done yet also does not break the streak. Preseason there are no optional days
   in the seeded plan, but the machinery stays — it is how Fri/Sat go back to
   bonus days when the season restarts.
+- **A tick must never wipe a count.** `drill_complete` writes only the fields
+  the request actually carried: the tick on the Today list posts no count and
+  no rating, and it would otherwise blank the 30 he counted on the drill page
+  ten minutes earlier - which is what his record is made of. A rep drill still
+  gets its `actual_minutes` cleared and vice versa; that part is deliberate.
+- **Counts are editable on Coach -> His sessions.** `coach_log_edit` changes
+  the number or blanks it, and never deletes the row: saying he did not do the
+  drill would move his streak and his badges. Per-drill *minutes* are not
+  editable - nothing writes them any more, and old rows still feed his
+  lifetime minutes through the `_minutes_per_log` fallback.
 - **His own score is the thing to beat.** `progress.personal_best()` reads the
   best `actual_reps` for a drill; `drill_complete` reads it *before* the tick
   overwrites today's row, and counts anything already logged today, or ticking

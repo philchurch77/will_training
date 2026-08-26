@@ -9,6 +9,8 @@ from django.urls import reverse
 
 from training.models import EarnedBadge, SessionLog
 
+from .conftest import MONDAY
+
 pytestmark = pytest.mark.django_db
 
 
@@ -235,6 +237,132 @@ class TestRecords:
         ).content.decode()
         assert "Your best:" in body
         assert "33" in body
+
+
+class TestCountsSurviveATick:
+    """A tick carries no count. It must not wipe one.
+
+    The record board is made of these numbers, so a Today tick landing on a
+    drill he had already counted would quietly delete his best score.
+    """
+
+    def test_ticking_from_today_keeps_a_count_made_on_the_drill_page(
+        self, logged_in, will, plan, rep_drill
+    ):
+        from training.models import SessionLog
+
+        url = reverse("training:drill_complete", args=[rep_drill.slug])
+        logged_in.post(url, {"actual_reps": "30"})       # counted on the drill page
+        logged_in.post(url, {"session_seconds": "600"})  # ticked again from Today
+
+        log = SessionLog.objects.get(athlete=will, drill=rep_drill)
+        assert log.actual_reps == 30
+        assert log.completed
+
+    def test_it_keeps_a_rating_too(self, logged_in, will, plan, rep_drill):
+        from training.models import SessionLog
+
+        url = reverse("training:drill_complete", args=[rep_drill.slug])
+        logged_in.post(url, {"rating": "4", "actual_reps": "12"})
+        logged_in.post(url, {})
+
+        log = SessionLog.objects.get(athlete=will, drill=rep_drill)
+        assert log.rating == 4
+        assert log.actual_reps == 12
+
+    def test_a_new_count_still_replaces_the_old_one(
+        self, logged_in, will, plan, rep_drill
+    ):
+        from training.models import SessionLog
+
+        url = reverse("training:drill_complete", args=[rep_drill.slug])
+        logged_in.post(url, {"actual_reps": "12"})
+        logged_in.post(url, {"actual_reps": "19"})
+        assert SessionLog.objects.get(athlete=will, drill=rep_drill).actual_reps == 19
+
+
+class TestFixingACount:
+    """A number nobody watched him make can sit on his record board for ever,
+    so the coach screen has to be able to correct it."""
+
+    def test_the_coach_can_change_a_count(self, logged_in, will, plan, rep_drill):
+        from training import progress
+        from training.models import SessionLog
+
+        log = SessionLog.objects.create(
+            athlete=will, date=MONDAY, drill=rep_drill, actual_reps=30
+        )
+        logged_in.post(reverse("training:coach_log_edit", args=[log.pk]), {"reps": "12"})
+
+        log.refresh_from_db()
+        assert log.actual_reps == 12
+        assert progress.personal_best(will, rep_drill) == 12
+
+    def test_an_empty_box_rubs_the_count_out(self, logged_in, will, plan, rep_drill):
+        from training import progress
+        from training.models import SessionLog
+
+        log = SessionLog.objects.create(
+            athlete=will, date=MONDAY, drill=rep_drill, actual_reps=30
+        )
+        logged_in.post(reverse("training:coach_log_edit", args=[log.pk]), {"reps": ""})
+
+        log.refresh_from_db()
+        assert log.actual_reps is None
+        assert progress.personal_best(will, rep_drill) is None
+        assert progress.best_scores(will) == []
+
+    def test_the_session_itself_survives(self, logged_in, will, plan, rep_drill):
+        """His streak is not worth rewriting over a wrong score."""
+        from training import progress
+        from training.models import SessionLog
+
+        log = SessionLog.objects.create(
+            athlete=will, date=MONDAY, drill=rep_drill, actual_reps=30
+        )
+        logged_in.post(reverse("training:coach_log_edit", args=[log.pk]), {"reps": ""})
+
+        log.refresh_from_db()
+        assert log.completed
+        assert progress.drills_completed(will) == 1
+        assert progress.current_streak(will, MONDAY) == 1
+
+    def test_a_timed_drill_has_nothing_to_edit(self, logged_in, will, plan, drill):
+        """Nothing records per-drill minutes any more. The old numbers stay as
+        they are, because his lifetime minutes are counted from them."""
+        from training.models import SessionLog
+
+        log = SessionLog.objects.create(
+            athlete=will, date=MONDAY, drill=drill, actual_minutes=6
+        )
+        logged_in.post(
+            reverse("training:coach_log_edit", args=[log.pk]), {"minutes": "99"}
+        )
+        log.refresh_from_db()
+        assert log.actual_minutes == 6
+
+        body = logged_in.get(reverse("training:coach_logs")).content.decode()
+        assert "6 min" in body
+
+    def test_it_needs_a_post(self, logged_in, will, plan, rep_drill):
+        from training.models import SessionLog
+
+        log = SessionLog.objects.create(
+            athlete=will, date=MONDAY, drill=rep_drill, actual_reps=30
+        )
+        assert logged_in.get(
+            reverse("training:coach_log_edit", args=[log.pk])
+        ).status_code == 405
+
+    def test_the_log_screen_offers_the_box(self, logged_in, will, plan, rep_drill):
+        from training.models import SessionLog
+
+        log = SessionLog.objects.create(
+            athlete=will, date=MONDAY, drill=rep_drill, actual_reps=30
+        )
+        body = logged_in.get(reverse("training:coach_logs")).content.decode()
+        assert reverse("training:coach_log_edit", args=[log.pk]) in body
+        assert 'value="30"' in body
 
 
 class TestSessionClock:

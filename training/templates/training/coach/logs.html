@@ -7,11 +7,14 @@
 <h1>{{ athlete.first_name|default:"Will" }}'s sessions</h1>
 <p class="muted">
   Current streak {{ streak }} &middot; {{ month_sessions }} session{{ month_sessions|pluralize }} this month.
-  Showing the most recent 200.
+  Showing the most recent 200. Counts are editable - change one and tick to
+  save, or empty the box to rub it out. The session itself stays either way, so
+  his streak and his badges do not move. The minutes on older rows are from the
+  per-drill timer that no longer exists.
 </p>
 
 <table>
-  <tr><th>Date</th><th>Drill</th><th>Did</th><th>Felt</th></tr>
+  <tr><th>Date</th><th>Drill</th><th>Count</th><th>Felt</th></tr>
   {% for log in logs %}
     <tr>
       <td class="muted">{{ log.date|date:"D j M" }}</td>
@@ -19,10 +22,26 @@
         {{ log.drill.name }}<br>
         <span class="muted" style="font-size:13px">{{ log.drill.skill.name }}</span>
       </td>
-      <td class="muted">
-        {% if log.actual_minutes %}{{ log.actual_minutes }} min
-        {% elif log.actual_reps %}{{ log.actual_reps }} reps
-        {% else %}&mdash;{% endif %}
+      <td>
+        {% if log.drill.is_timed %}
+          {# Old rows only: the per-drill timer is gone, so nothing writes #}
+          {# minutes any more. Shown because his lifetime minutes come from #}
+          {# these, but there is nothing here worth editing. #}
+          {% if log.actual_minutes %}
+            <span class="muted">{{ log.actual_minutes }} min</span>
+          {% else %}<span class="muted">&mdash;</span>{% endif %}
+        {% else %}
+          {# Editable: a count nobody watched him make would otherwise sit on #}
+          {# his record board for ever. Empty the box to rub it out. #}
+          <form method="post" class="logedit"
+                action="{% url 'training:coach_log_edit' log.pk %}">
+            {% csrf_token %}
+            <input type="number" name="reps" min="0" max="10000" inputmode="numeric"
+                   value="{{ log.actual_reps|default_if_none:'' }}"
+                   aria-label="Reps for {{ log.drill.name }} on {{ log.date|date:'j M' }}">
+            <button class="sbtn" type="submit" aria-label="Save">&#10003;</button>
+          </form>
+        {% endif %}
       </td>
       <td>
         {% if log.rating %}{{ log.get_rating_display }}{% else %}<span class="muted">&mdash;</span>{% endif %}

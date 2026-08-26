@@ -613,6 +613,13 @@ a.drill-row:active { transform: scale(.985); }
   border: 1px solid var(--line); background: var(--surface-2);
   color: var(--ink); font: inherit; font-size: 16px; cursor: pointer;
 }
+/* The count on a session row, edited in place. Narrow enough that the
+   four-column table still fits a phone. */
+.coach .logedit { display: flex; align-items: center; gap: 6px; margin: 0; }
+.coach .logedit input[type="number"] {
+  width: 72px; padding: 10px 8px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 .coach label { display: block; margin: 12px 0 4px; font-weight: 700; font-size: 14px; }
 .coach input[type="text"], .coach input[type="number"], .coach textarea,
 .coach select {

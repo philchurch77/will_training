@@ -24,4 +24,5 @@ urlpatterns = [
     path("coach/drills/new/", views.coach_drill_edit, name="coach_drill_new"),
     path("coach/drills/<slug:slug>/", views.coach_drill_edit, name="coach_drill_edit"),
     path("coach/logs/", views.coach_logs, name="coach_logs"),
+    path("coach/logs/<int:pk>/edit/", views.coach_log_edit, name="coach_log_edit"),
 ]
