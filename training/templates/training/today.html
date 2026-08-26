@@ -56,6 +56,32 @@
       </div>
     </form>
 
+    {# He trained but never started the clock. No typing - the same stepper #}
+    {# he uses to count keepy-ups, starting on the day's normal length. #}
+    <button type="button" class="linkbtn byhand-open" id="byhandopen">
+      Forgot to start the clock?
+    </button>
+
+    <form method="post" action="{% url 'training:session_time' %}" id="byhandform"
+          class="byhand" data-offline hidden>
+      {% csrf_token %}
+      <input type="hidden" name="date" value="{{ today|date:'Y-m-d' }}">
+      <input type="hidden" name="minutes" id="byhandminutes" value="">
+      <p class="count-target">How long were you out?</p>
+      <div class="counter counter-sm">
+        <button class="count-btn" id="byhandminus" type="button"
+                aria-label="Five minutes less">&minus;</button>
+        <div class="count-val" id="byhandval"
+             data-start="{{ summary.planned_minutes }}">30</div>
+        <button class="count-btn" id="byhandplus" type="button"
+                aria-label="Five minutes more">+</button>
+      </div>
+      <button type="submit" class="btn" id="byhandsave">Save 30 minutes</button>
+      <p class="center mt" style="margin-bottom:0">
+        <button type="button" class="linkbtn" id="byhandcancel">Cancel</button>
+      </p>
+    </form>
+
     <p class="hero-sub mt">
       {{ summary.done_count }}/{{ summary.total_count }} drills done
       {% if streak %}&middot; {{ streak }} day streak

@@ -68,6 +68,8 @@
   }
 
   // --- painting ----------------------------------------------------------
+  var openBtn = null;
+  var byhandForm = null;
   var clockEl = document.getElementById('clock');
   var startBtn = document.getElementById('clockstart');
   var finishBtn = document.getElementById('clockfinish');
@@ -95,6 +97,11 @@
       chip.hidden = !state.startedAt && !seconds;
       chip.textContent = fmt(seconds);
       chip.classList.toggle('is-paused', !state.startedAt);
+    }
+
+    // No offering to set it by hand while it is visibly running.
+    if (openBtn && byhandForm && byhandForm.hidden) {
+      openBtn.hidden = !!state.startedAt;
     }
 
     // Every form that posts to the server carries the clock with it.
@@ -188,6 +195,68 @@
         if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
       }
     });
+  }
+
+  // --- setting it by hand ------------------------------------------------
+  // He trained and forgot to start the clock. No typing: the same minus/plus
+  // stepper he uses to count keepy-ups, in fives, starting on the length the
+  // day is planned at so the usual answer is nought taps away.
+  openBtn = document.getElementById('byhandopen');
+  byhandForm = document.getElementById('byhandform');
+
+  if (openBtn && byhandForm) {
+    var valEl = document.getElementById('byhandval');
+    var minutesField = document.getElementById('byhandminutes');
+    var saveBtn = document.getElementById('byhandsave');
+    var minutes = parseInt(valEl.dataset.start, 10) || 30;
+
+    function paintByhand() {
+      valEl.textContent = String(minutes);
+      minutesField.value = String(minutes);
+      saveBtn.textContent = 'Save ' + minutes + ' minutes';
+    }
+
+    function bumpByhand(by) {
+      minutes = Math.max(5, Math.min(180, minutes + by));
+      paintByhand();
+      if (navigator.vibrate) { navigator.vibrate(8); }
+    }
+
+    document.getElementById('byhandplus').addEventListener('click', function () {
+      bumpByhand(5);
+    });
+    document.getElementById('byhandminus').addEventListener('click', function () {
+      bumpByhand(-5);
+    });
+
+    openBtn.addEventListener('click', function () {
+      // Start from whatever is on the clock if anything is, so this doubles as
+      // a way to correct a number that is wrong rather than missing.
+      var onClock = Math.round(elapsed() / 60);
+      minutes = Math.max(5, Math.round((onClock || minutes) / 5) * 5);
+      paintByhand();
+      byhandForm.hidden = false;
+      openBtn.hidden = true;
+    });
+
+    document.getElementById('byhandcancel').addEventListener('click', function () {
+      byhandForm.hidden = true;
+      openBtn.hidden = false;
+    });
+
+    // What he says happened is what happened. Write it to the phone's own
+    // clock before the form goes, or the stale local value would win the next
+    // time this page loads and quietly put the old number back.
+    byhandForm.addEventListener('submit', function () {
+      state.accumulated = minutes * 60;
+      state.startedAt = null;
+      write(state);
+      clearInterval(ticker);
+      ticker = null;
+      releaseScreen();
+    });
+
+    paintByhand();
   }
 
   // Re-acquire the lock and catch the display up after a spell in the

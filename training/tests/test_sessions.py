@@ -248,5 +248,56 @@ class TestSessionClock:
         )
         assert SessionClock.objects.get(athlete=will).date == yesterday
 
+    def test_he_can_set_the_time_by_hand(self, logged_in, will, plan):
+        """The evening he trains for half an hour and never starts the clock."""
+        from django.utils import timezone
+
+        from training.models import SessionClock
+
+        logged_in.post(reverse("training:session_time"), {"minutes": "35"})
+        clock = SessionClock.objects.get(athlete=will, date=timezone.localdate())
+        assert clock.seconds == 35 * 60
+
+    def test_a_number_he_set_himself_can_correct_one_that_is_too_big(
+        self, logged_in, will, plan
+    ):
+        """The one case where the clock is allowed to go down. He knows what he
+        did better than a clock he left running does."""
+        from training.models import SessionClock
+
+        url = reverse("training:session_time")
+        logged_in.post(url, {"seconds": "5400"})  # an hour and a half, left running
+        logged_in.post(url, {"minutes": "25"})
+
+        assert SessionClock.objects.get(athlete=will).seconds == 25 * 60
+
+    def test_a_running_clock_still_cannot_be_rewound_by_a_stale_tick(
+        self, logged_in, will, plan, drill
+    ):
+        # Only a by-hand figure may go down; ticks keep the old rule.
+        from training.models import SessionClock
+
+        logged_in.post(reverse("training:session_time"), {"minutes": "30"})
+        logged_in.post(
+            reverse("training:drill_complete", args=[drill.slug]),
+            {"session_seconds": "60"},
+        )
+        assert SessionClock.objects.get(athlete=will).seconds == 30 * 60
+
+    def test_a_daft_number_of_minutes_is_ignored(self, logged_in, will, plan):
+        from training.models import SessionClock
+
+        url = reverse("training:session_time")
+        logged_in.post(url, {"minutes": "600"})   # ten hours
+        logged_in.post(url, {"minutes": "0"})
+        assert not SessionClock.objects.filter(athlete=will).exists()
+
+    def test_today_offers_the_by_hand_stepper(self, logged_in, plan):
+        # No typing anywhere on his screens: it has to be minus and plus.
+        body = logged_in.get(reverse("training:today")).content.decode()
+        assert "Forgot to start the clock?" in body
+        assert 'id="byhandminus"' in body
+        assert 'type="text"' not in body
+
     def test_get_is_not_allowed(self, logged_in, plan):
         assert logged_in.get(reverse("training:session_time")).status_code == 405

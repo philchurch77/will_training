@@ -332,14 +332,18 @@ def award_badges(athlete, today):
     return newly
 
 
-def record_session_seconds(athlete, day, seconds):
+def record_session_seconds(athlete, day, seconds, exact=False):
     """Save how long today's session has been running.
 
-    Only ever upwards. The clock is posted with every tick as well as by the
-    Finish button, and a tick queued offline can arrive long after the session
-    has moved on, so the later, larger value must win. Nonsense is clamped
-    rather than rejected: a stuck clock should not lose him the tick it rode
-    in on.
+    Normally only ever upwards. The clock is posted with every tick as well as
+    by the Finish button, and a tick queued offline can arrive long after the
+    session has moved on, so the later, larger value must win. Nonsense is
+    clamped rather than rejected: a stuck clock should not lose him the tick it
+    rode in on.
+
+    `exact` is for the one case where a smaller number is the right answer: he
+    forgot to start the clock and is telling us by hand what he actually did.
+    A figure he typed in himself beats anything the phone worked out.
     """
     try:
         seconds = int(seconds)
@@ -352,7 +356,7 @@ def record_session_seconds(athlete, day, seconds):
     clock, created = SessionClock.objects.get_or_create(
         athlete=athlete, date=day, defaults={"seconds": seconds}
     )
-    if not created and seconds > clock.seconds:
+    if not created and (exact or seconds > clock.seconds):
         clock.seconds = seconds
         clock.save(update_fields=["seconds", "updated_at"])
     return clock

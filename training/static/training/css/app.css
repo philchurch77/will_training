@@ -284,6 +284,19 @@ a { color: var(--accent); }
   font-variant-numeric: tabular-nums;
 }
 .clockchip.is-paused { background: var(--surface-2); color: var(--ink-2); }
+
+/* Setting the time by hand, for the day he forgets to start the clock. No
+   typing on his screens, so it is the rep counter's stepper in fives. */
+.byhand-open { margin-top: 12px; }
+.byhand[hidden], .byhand-open[hidden] { display: none; }
+.byhand {
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--accent-line);
+}
+.byhand .count-target { margin-bottom: 0; }
+.counter-sm { gap: 16px; margin: 6px 0 14px; }
+.counter-sm .count-btn { width: 64px; height: 64px; font-size: 32px; }
+.counter-sm .count-val { font-size: 44px; min-width: 84px; }
 .clockchip[hidden] { display: none; }
 .count-val.is-beaten { color: var(--accent); }
 .counter { display: flex; align-items: center; justify-content: center; gap: 20px;

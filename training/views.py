@@ -217,15 +217,26 @@ def drill_uncomplete(request, slug):
 @login_required
 @require_POST
 def session_time(request):
-    """Bank the session clock: the Finish button, and a best-effort save on pause.
+    """Bank the session clock.
 
-    Separate from ticking a drill because he might train for twenty minutes on
-    the one drill he is enjoying and tick nothing until the end.
+    Three things post here: the Finish button, a best-effort save when he
+    pauses, and the by-hand entry for the evening he forgets to start it at
+    all. Separate from ticking a drill because he might train for twenty
+    minutes on the one drill he is enjoying and tick nothing until the end.
     """
     day = _parse_date(request.POST.get("date")) or _today()
-    clock = progress.record_session_seconds(
-        request.user, day, request.POST.get("seconds")
-    )
+
+    # Minutes mean he set it by hand because he forgot to start the clock, so
+    # that figure replaces whatever the phone thinks - downwards included.
+    minutes = _parse_int(request.POST.get("minutes"), lo=1, hi=180)
+    if minutes is not None:
+        clock = progress.record_session_seconds(
+            request.user, day, minutes * 60, exact=True
+        )
+    else:
+        clock = progress.record_session_seconds(
+            request.user, day, request.POST.get("seconds")
+        )
 
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return JsonResponse({"ok": True, "seconds": clock.seconds if clock else 0})

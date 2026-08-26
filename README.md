@@ -222,6 +222,13 @@ bar - so there is nothing telling him to stop doing the thing he is enjoying.
 That was the point of the change: a five-minute countdown on a drill he liked
 was what made him put the phone down.
 
+**If he forgets to start it**, *Forgot to start the clock?* on the Today card
+opens a minus/plus stepper in fives - the same control he uses to count
+keepy-ups, because there is no typing anywhere on his screens. It starts on the
+day's planned length, so the usual answer is one tap on *Save*. A figure he sets
+himself is the one case where the clock is allowed to go *down*, so it also
+corrects a clock he left running by mistake.
+
 The drills still say roughly how long they are meant to take, and that is all it
 is now: a guide for planning the week, not a stopwatch pointed at him.
 

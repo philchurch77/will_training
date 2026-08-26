@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 197 tests, ~75s
+uv run pytest                    # 202 tests, ~75s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -59,6 +59,13 @@ Function-based views on purpose: one maintainer, re-read in a year.
   `localStorage` so it survives navigating into a drill and back). Per-drill
   countdowns were removed on purpose: a clock running down on the drill he was
   enjoying is what made him stop. Do not put one back.
+- **A by-hand figure is the only thing that may lower the clock.**
+  `record_session_seconds(..., exact=True)`, reached by posting `minutes`
+  rather than `seconds` to `session_time`. Everything else takes the larger
+  value so a tick queued offline cannot rewind a session that has run on. The
+  entry point is a minus/plus stepper in fives on Today - no typing on his
+  screens - and `session.js` writes the number into `localStorage` before the
+  form posts, or the stale local value puts the old number straight back.
 - **`SessionClock` is the source of truth for minutes, when it exists.**
   `progress._minutes_per_log()` is the only place that knows the rule: a day he
   clocked is worth what the clock says, shared across the drills he ticked; a
