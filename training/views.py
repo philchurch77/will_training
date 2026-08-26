@@ -15,6 +15,7 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -116,6 +117,7 @@ def today(request):
     summary = progress.today_summary(athlete, day)
     just_done = request.GET.get("done")
     new_badges = request.session.pop("new_badges", [])
+    new_record = request.session.pop("new_record", None)
 
     return render(
         request,
@@ -126,6 +128,7 @@ def today(request):
             "streak": progress.current_streak(athlete, day),
             "just_done": just_done,
             "new_badges": new_badges,
+            "new_record": new_record,
             "tab": "today",
         },
     )
@@ -144,7 +147,12 @@ def drill_detail(request, slug):
     return render(
         request,
         "training/drill.html",
-        {"drill": drill, "already_done": already, "tab": "today"},
+        {
+            "drill": drill,
+            "already_done": already,
+            "best": progress.personal_best(athlete, drill),
+            "tab": "today",
+        },
     )
 
 
@@ -165,6 +173,16 @@ def drill_complete(request, slug):
     minutes = _parse_int(request.POST.get("actual_minutes"), lo=0, hi=600)
     reps = _parse_int(request.POST.get("actual_reps"), lo=0, hi=10000)
 
+    # Read the old best before the tick overwrites today's row - and count
+    # anything already logged today, or ticking the same number twice would
+    # claim a second record.
+    previous_best = max(
+        progress.personal_best(athlete, drill, before=day) or 0,
+        SessionLog.objects.filter(athlete=athlete, date=day, drill=drill)
+        .values_list("actual_reps", flat=True)
+        .first() or 0,
+    ) or None
+
     with transaction.atomic():
         # Every tick carries the session clock with it, so the time is banked
         # even if he never taps Finish.
@@ -184,6 +202,10 @@ def drill_complete(request, slug):
         )
         new_badges = progress.award_badges(athlete, day)
 
+    record = None
+    if reps and not drill.is_timed and (previous_best is None or reps > previous_best):
+        record = {"drill": drill.name, "reps": reps, "previous": previous_best}
+
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return JsonResponse(
             {
@@ -193,9 +215,12 @@ def drill_complete(request, slug):
                     {"name": b.name, "emoji": b.emoji, "description": b.description}
                     for b in new_badges
                 ],
+                "record": record,
             }
         )
 
+    if record:
+        request.session["new_record"] = record
     if new_badges:
         request.session["new_badges"] = [
             {"name": b.name, "emoji": b.emoji, "description": b.description}
@@ -259,6 +284,7 @@ def progress_view(request):
             "total_minutes": progress.total_minutes(athlete),
             "skill_rows": progress.minutes_by_skill(athlete),
             "badge_rows": progress.badge_progress(athlete, day),
+            "best_rows": progress.best_scores(athlete),
             "tab": "progress",
             "today": day,
         },
@@ -287,18 +313,31 @@ def library(request, slug=None):
 @coach_required
 def coach_plan(request):
     plan = TrainingPlan.get_active()
-    days = []
+    rows = []
     if plan:
-        days = (
-            plan.days.prefetch_related("items__drill__skill")
-            .order_by("weekday")
-            .all()
-        )
+        for day in plan.days.prefetch_related("items__drill__skill").order_by("weekday"):
+            rows.append(
+                {
+                    "day": day,
+                    "week_a": len(day.drills_for_week(PlanDrill.WEEK_A)),
+                    "week_b": len(day.drills_for_week(PlanDrill.WEEK_B)),
+                }
+            )
     return render(
         request,
         "training/coach/plan.html",
-        {"plan": plan, "days": days, "weekdays": WEEKDAYS, "tab": "coach"},
+        {
+            "plan": plan,
+            "rows": rows,
+            "weekdays": WEEKDAYS,
+            "this_week": _week_letter(progress.week_of(_today())),
+            "tab": "coach",
+        },
     )
+
+
+def _week_letter(week):
+    return "B" if week == PlanDrill.WEEK_B else "A"
 
 
 @coach_required
@@ -307,6 +346,14 @@ def coach_plan_day(request, weekday):
     if plan is None:
         return redirect("training:coach_plan")
     day = get_object_or_404(PlanDay, plan=plan, weekday=weekday)
+
+    # One week of the fortnight at a time, defaulting to the one he is
+    # actually in, so what is on screen is what Will will see today.
+    asked = request.GET.get("week") or request.POST.get("week")
+    week = {"A": PlanDrill.WEEK_A, "B": PlanDrill.WEEK_B}.get(
+        asked, progress.week_of(_today())
+    )
+    here = f"{reverse('training:coach_plan_day', args=[weekday])}?week={_week_letter(week)}"
 
     form = PlanDayForm(instance=day)
 
@@ -317,25 +364,32 @@ def coach_plan_day(request, weekday):
             form = PlanDayForm(request.POST, instance=day)
             if form.is_valid():
                 form.save()
-                return redirect("training:coach_plan_day", weekday=weekday)
+                return redirect(here)
             # Fall through so the invalid form renders with its errors.
         elif action == "add":
             drill = get_object_or_404(Drill, pk=request.POST.get("drill"))
             next_order = (
-                day.items.order_by("-order").values_list("order", flat=True).first()
+                day.items.filter(week=week)
+                .order_by("-order")
+                .values_list("order", flat=True)
+                .first()
             )
             PlanDrill.objects.create(
-                plan_day=day, drill=drill, order=(next_order or 0) + 1
+                plan_day=day, drill=drill, order=(next_order or 0) + 1, week=week
             )
-            return redirect("training:coach_plan_day", weekday=weekday)
+            return redirect(here)
         elif action == "remove":
             day.items.filter(pk=request.POST.get("item")).delete()
-            return redirect("training:coach_plan_day", weekday=weekday)
+            return redirect(here)
         elif action in {"up", "down"}:
-            _move_item(day, request.POST.get("item"), action)
-            return redirect("training:coach_plan_day", weekday=weekday)
+            _move_item(day, request.POST.get("item"), action, week)
+            return redirect(here)
 
-    items = day.items.select_related("drill", "drill__skill").order_by("order", "pk")
+    items = (
+        day.items.select_related("drill", "drill__skill")
+        .filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week))
+        .order_by("order", "pk")
+    )
     return render(
         request,
         "training/coach/plan_day.html",
@@ -345,13 +399,23 @@ def coach_plan_day(request, weekday):
             "items": items,
             "skills": Skill.objects.prefetch_related("drills"),
             "planned_minutes": sum(i.drill.estimated_minutes for i in items),
+            "week": _week_letter(week),
+            "every_week": PlanDrill.EVERY_WEEK,
         },
     )
 
 
-def _move_item(day, item_pk, direction):
-    """Swap a drill with its neighbour in the running order."""
-    items = list(day.items.order_by("order", "pk"))
+def _move_item(day, item_pk, direction, week):
+    """Swap a drill with its neighbour in one week's running order.
+
+    Scoped to the week on screen: the two halves of the fortnight each number
+    their drills from one, and reordering across both would interleave them.
+    """
+    items = list(
+        day.items.filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week)).order_by(
+            "order", "pk"
+        )
+    )
     index = next((i for i, it in enumerate(items) if str(it.pk) == str(item_pk)), None)
     if index is None:
         return

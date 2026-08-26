@@ -6,6 +6,23 @@
 
 <div class="offline-note">No signal - your ticks are saved and will sync later.</div>
 
+{% if new_record %}
+  <div class="card newbadge">
+    <div class="badge-em">&#127942;</div>
+    {% if new_record.previous %}
+      <h2>New record: {{ new_record.reps }}!</h2>
+      <p class="hero-sub">
+        {{ new_record.drill }} - you beat {{ new_record.previous }}.
+      </p>
+    {% else %}
+      <h2>{{ new_record.reps }} on the board</h2>
+      <p class="hero-sub">
+        {{ new_record.drill }} - that is the one to beat now.
+      </p>
+    {% endif %}
+  </div>
+{% endif %}
+
 {% for b in new_badges %}
   <div class="card newbadge">
     <div class="badge-em">{{ b.emoji }}</div>
@@ -122,8 +139,9 @@
             <span>{{ row.drill.skill.name }}</span>
             {% if not row.drill.is_timed %}<span>{{ row.drill.target_label }}</span>{% endif %}
             {% if row.drill.weak_foot %}<span>weak foot</span>{% endif %}
+            {# Every drill needs a ball, so saying so on all six says nothing. #}
             <span class="kit" aria-hidden="true">
-              {% for emoji, label in row.drill.equipment %}{{ emoji }}{% endfor %}
+              {% for emoji, label in row.drill.equipment %}{% if label != "Ball" %}{{ emoji }}{% endif %}{% endfor %}
             </span>
           </span>
         </a>

@@ -155,6 +155,88 @@ class TestBadgeAwardOnCompletion:
         assert EarnedBadge.objects.filter(athlete=will).count() == 1
 
 
+class TestRecords:
+    def test_beating_his_best_is_announced_on_today(
+        self, logged_in, will, plan, rep_drill
+    ):
+        from django.utils import timezone
+
+        from training.models import SessionLog
+
+        SessionLog.objects.create(
+            athlete=will, date=timezone.localdate() - __import__("datetime").timedelta(days=2),
+            drill=rep_drill, actual_reps=20,
+        )
+        logged_in.post(
+            reverse("training:drill_complete", args=[rep_drill.slug]),
+            {"actual_reps": "27"},
+        )
+        body = logged_in.get(reverse("training:today")).content.decode()
+        assert "New record: 27" in body
+        assert "you beat 20" in body
+
+    def test_a_first_score_is_put_on_the_board_not_called_a_record(
+        self, logged_in, will, plan, rep_drill
+    ):
+        logged_in.post(
+            reverse("training:drill_complete", args=[rep_drill.slug]),
+            {"actual_reps": "12"},
+        )
+        body = logged_in.get(reverse("training:today")).content.decode()
+        assert "12 on the board" in body
+
+    def test_a_worse_score_says_nothing(self, logged_in, will, plan, rep_drill):
+        import datetime
+
+        from django.utils import timezone
+
+        from training.models import SessionLog
+
+        SessionLog.objects.create(
+            athlete=will, date=timezone.localdate() - datetime.timedelta(days=1),
+            drill=rep_drill, actual_reps=30,
+        )
+        logged_in.post(
+            reverse("training:drill_complete", args=[rep_drill.slug]),
+            {"actual_reps": "11"},
+        )
+        body = logged_in.get(reverse("training:today")).content.decode()
+        assert "record" not in body.lower()
+
+    def test_re_ticking_the_same_day_does_not_re_announce_it(
+        self, logged_in, will, plan, rep_drill
+    ):
+        """Today's row is overwritten, so the old best must be read without it -
+        otherwise ticking twice with the same number claims a second record."""
+        url = reverse("training:drill_complete", args=[rep_drill.slug])
+        logged_in.post(url, {"actual_reps": "25"})
+        logged_in.get(reverse("training:today"))          # clears the first one
+        logged_in.post(url, {"actual_reps": "25"})
+
+        body = logged_in.get(reverse("training:today")).content.decode()
+        assert "on the board" not in body
+        assert "New record" not in body
+
+    def test_the_drill_page_shows_what_there_is_to_beat(
+        self, logged_in, will, plan, rep_drill
+    ):
+        import datetime
+
+        from django.utils import timezone
+
+        from training.models import SessionLog
+
+        SessionLog.objects.create(
+            athlete=will, date=timezone.localdate() - datetime.timedelta(days=3),
+            drill=rep_drill, actual_reps=33,
+        )
+        body = logged_in.get(
+            reverse("training:drill", args=[rep_drill.slug])
+        ).content.decode()
+        assert "Your best:" in body
+        assert "33" in body
+
+
 class TestSessionClock:
     """One clock for the whole session, instead of a countdown per drill.
 

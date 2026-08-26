@@ -6,7 +6,14 @@
 {% block content %}
 <h1>{{ day.get_weekday_display }}</h1>
 <p class="muted">
-  Planned: {{ planned_minutes }} min of drills &middot; target {{ day.target_minutes }} min
+  Week {{ week }} &middot; {{ planned_minutes }} min of drills
+  &middot; target {{ day.target_minutes }} min
+</p>
+<p>
+  <a class="linkbtn {% if week == 'A' %}is-on{% endif %}"
+     href="?week=A">Week A</a>
+  <a class="linkbtn {% if week == 'B' %}is-on{% endif %}"
+     href="?week=B">Week B</a>
 </p>
 
 <div class="card">
@@ -14,13 +21,14 @@
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="settings">
+    <input type="hidden" name="week" value="{{ week }}">
     {{ form.as_p }}
     <button type="submit" class="btn mt">Save</button>
   </form>
 </div>
 
 <div class="card">
-  <h3>Drills in order</h3>
+  <h3>Drills in order - week {{ week }}</h3>
   {% if not items %}
     <p class="muted">Nothing here yet.</p>
   {% endif %}
@@ -31,12 +39,14 @@
           <form method="post" class="inline">
             {% csrf_token %}
             <input type="hidden" name="action" value="up">
+            <input type="hidden" name="week" value="{{ week }}">
             <input type="hidden" name="item" value="{{ item.pk }}">
             <button class="sbtn" type="submit" aria-label="Move up">&uarr;</button>
           </form>
           <form method="post" class="inline">
             {% csrf_token %}
             <input type="hidden" name="action" value="down">
+            <input type="hidden" name="week" value="{{ week }}">
             <input type="hidden" name="item" value="{{ item.pk }}">
             <button class="sbtn" type="submit" aria-label="Move down">&darr;</button>
           </form>
@@ -46,13 +56,16 @@
           <span class="muted" style="font-size:13px">
             {{ item.drill.skill.name }} &middot; {{ item.drill.target_label }}
             {% if item.drill.weak_foot %} &middot; weak foot{% endif %}
+            {% if item.drill.is_juggling %} &middot; juggling{% endif %}
             {% if item.drill.is_fun %} &middot; finisher{% endif %}
+            {% if item.week == every_week %} &middot; <strong>every week</strong>{% endif %}
           </span>
         </td>
         <td style="width:1%">
           <form method="post" class="inline">
             {% csrf_token %}
             <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="week" value="{{ week }}">
             <input type="hidden" name="item" value="{{ item.pk }}">
             <button class="sbtn" type="submit" aria-label="Remove">&times;</button>
           </form>
@@ -67,6 +80,7 @@
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="add">
+    <input type="hidden" name="week" value="{{ week }}">
     <label for="drillpick">Drill</label>
     <select name="drill" id="drillpick">
       {% for skill in skills %}
@@ -79,7 +93,9 @@
         </optgroup>
       {% endfor %}
     </select>
-    <button type="submit" class="btn mt">Add to {{ day.get_weekday_display }}</button>
+    <button type="submit" class="btn mt">
+      Add to {{ day.get_weekday_display }}, week {{ week }}
+    </button>
   </form>
 </div>
 

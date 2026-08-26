@@ -101,11 +101,16 @@ class TestTodayScreen:
         response = client.get(reverse("training:today"))
         assert response.status_code == 200
 
+        # The day runs two alternating sessions, so this has to ask for the
+        # one the fortnight is actually on.
+        from training import progress
+
         plan = TrainingPlan.get_active()
-        today = plan.days.get(weekday=timezone.localdate().weekday())
+        day = timezone.localdate()
+        today = plan.days.get(weekday=day.weekday())
         body = response.content.decode()
-        for item in today.items.all():
-            assert item.drill.name in body
+        for drill in today.drills_for_week(progress.week_of(day)):
+            assert drill.name in body
 
     def test_today_carries_the_session_clock(self, client, will, plan):
         client.force_login(will)
@@ -127,6 +132,28 @@ class TestTodayScreen:
             {"session_seconds": "600"},
         )
         assert SessionLog.objects.filter(athlete=will, drill=drill).exists()
+
+    def test_the_rows_only_show_kit_he_has_to_fetch(self, client, will, seeded):
+        """Every drill needs a ball, so the ball tells him nothing. The wall,
+        the cones and the space are what differ between one drill and the next.
+        The drill page still lists the lot, labels and all."""
+        from training.models import Drill, PlanDay, PlanDrill
+
+        walled = Drill.objects.filter(needs_wall=True, needs_ball=True).first()
+        PlanDay.objects.update(is_rest=False, is_optional=False)
+        for day in PlanDay.objects.all():
+            day.items.all().delete()
+            PlanDrill.objects.create(plan_day=day, drill=walled, order=1)
+
+        client.force_login(will)
+        row = client.get(reverse("training:today")).content.decode()
+        assert "\U0001f9f1" in row       # the wall is worth saying
+        assert "\u26bd" not in row       # the ball is not
+
+        page = client.get(
+            reverse("training:drill", args=[walled.slug])
+        ).content.decode()
+        assert "\u26bd" in page          # but the kit list still has it
 
     def test_a_rest_day_says_so(self, client, will, plan):
         """Force the plan so every day is a rest day, then check the wording."""
@@ -287,18 +314,54 @@ class TestCoachEditing:
     """Dad edits the plan through the same signed-in session."""
 
     def test_the_coach_can_reorder_a_day(self, client, will, seeded):
-        from training.models import PlanDay
+        from training.models import PlanDay, PlanDrill
 
         client.force_login(will)
         day = PlanDay.objects.get(weekday=0)
-        items = list(day.items.order_by("order"))
+        items = list(day.items.filter(week=PlanDrill.WEEK_A).order_by("order"))
         second = items[1]
 
         client.post(
             reverse("training:coach_plan_day", args=[0]),
-            {"action": "up", "item": second.pk},
+            {"action": "up", "item": second.pk, "week": "A"},
         )
-        assert list(day.items.order_by("order"))[0].pk == second.pk
+        moved = list(day.items.filter(week=PlanDrill.WEEK_A).order_by("order"))
+        assert moved[0].pk == second.pk
+
+    def test_reordering_one_week_leaves_the_other_alone(self, client, will, seeded):
+        """The two halves of the fortnight each number their drills from one.
+        Reordering across both would interleave them."""
+        from training.models import PlanDay, PlanDrill
+
+        client.force_login(will)
+        day = PlanDay.objects.get(weekday=0)
+        before = [
+            i.pk for i in day.items.filter(week=PlanDrill.WEEK_B).order_by("order")
+        ]
+        second_a = list(day.items.filter(week=PlanDrill.WEEK_A).order_by("order"))[1]
+
+        client.post(
+            reverse("training:coach_plan_day", args=[0]),
+            {"action": "up", "item": second_a.pk, "week": "A"},
+        )
+        after = [
+            i.pk for i in day.items.filter(week=PlanDrill.WEEK_B).order_by("order")
+        ]
+        assert after == before
+
+    def test_a_drill_added_lands_in_the_week_on_screen(self, client, will, seeded):
+        from training.models import Drill, PlanDay, PlanDrill
+
+        client.force_login(will)
+        day = PlanDay.objects.get(weekday=0)
+        drill = Drill.objects.get(slug="cruyff-turn")
+
+        client.post(
+            reverse("training:coach_plan_day", args=[0]),
+            {"action": "add", "drill": drill.pk, "week": "B"},
+        )
+        assert day.items.filter(drill=drill, week=PlanDrill.WEEK_B).exists()
+        assert not day.items.filter(drill=drill, week=PlanDrill.WEEK_A).exists()
 
     def test_the_coach_can_remove_a_drill_from_a_day(self, client, will, seeded):
         from training.models import PlanDay

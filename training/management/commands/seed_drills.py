@@ -13,6 +13,7 @@ Coaching principles baked into this data, for a 9-year-old in academy football:
   the fun of it, and they are pure first touch.
 * Nothing lasts longer than five minutes. Each session is a warm-up, four
   technical drills and a fun finisher, and lands on exactly 30 minutes.
+* One day off a week. Recovery is part of the plan, not a failure of it.
 * Instructions are written for Will to read himself.
 
 Re-running is safe: everything keys off a slug and updates in place.
@@ -573,12 +574,16 @@ JUGGLING = {
     "around-the-world",
 }
 
-# weekday -> (label, target_minutes, is_rest, is_optional, [drill slugs in order])
+# PRESEASON SHAPE: six sessions of exactly 30 minutes, and Sunday off. There is
+# no academy and there are no matches over the summer, so Friday and Saturday
+# are no longer bonus days. When the season restarts, put is_optional back on
+# weekdays 4 and 5 and cut them back down.
 #
-# PRESEASON SHAPE: seven full sessions of exactly 30 minutes. There is no
-# academy and there are no matches over the summer, so Friday and Saturday are
-# no longer bonus days - every day counts towards the streak. When the season
-# restarts, put is_optional back on weekdays 4 and 5 and cut them back down.
+# Sunday is a real rest day, not a bonus one. A nine-year-old training seven
+# days out of seven has nowhere to recover, and the streak - which breaks on a
+# missed required day - was pushing him to do it anyway. Rest days are skipped
+# by the streak walk entirely, so taking it costs him nothing. That is 180
+# minutes a week rather than 210.
 #
 # Every drill is five minutes, so a day is simply six of them: a ball-mastery
 # warm-up on the floor, four technical drills, then a fun finisher. Rep-based
@@ -595,35 +600,62 @@ JUGGLING = {
 # their own sake, and they are pure touch practice - so they are a fixture of
 # the session rather than something he might get round to.
 PLAN_NAME = "Will's Week"
+
+# Each day carries two running orders and alternates between them, so Monday is
+# not the same six drills for six months. The fortnight uses all 50 drills in
+# the library; on its own, one week could only ever reach 36 of them.
+#
+# Both weeks of a given day keep the same shape - the same label, the same
+# skills, speed on the same three days - so the balance of the fortnight is the
+# balance of either week. Swapping a drill means swapping it for one of the
+# same kind.
+#
+# (weekday, label, target_minutes, is_rest, is_optional,
+#  [week A drills], [week B drills])
 PLAN_DAYS = [
     (0, "Ball mastery + first touch", 30, False, False, [
         "foundations", "wall-control-inside", "weak-foot-control",
         "cushion-touch", "two-touch-wall-pass", "keepy-up-record",
+    ], [
+        "toe-taps", "thigh-control", "first-touch-turn",
+        "bouncing-control", "wall-pass-one-touch", "weak-foot-juggles",
     ]),
     (1, "Dribbling + speed", 30, False, False, [
         "rollovers", "cone-slalom", "step-over", "speed-dribble-gate",
         "cruyff-past-cone", "around-the-world",
+    ], [
+        "figure-eight-legs", "cruyff-turn", "drag-backs", "turn-and-sprint",
+        "change-of-pace", "keepy-up-record",
     ]),
     (2, "Passing + shooting", 30, False, False, [
         "sole-rolls", "weak-foot-wall-pass", "wall-pass-one-touch",
         "laces-technique", "corner-placement", "juggle-and-volley",
+    ], [
+        "rollovers", "target-passing", "driven-pass", "weak-foot-finish",
+        "low-driven-shot", "juggling-laces",
     ]),
     (3, "First touch + speed", 30, False, False, [
         "figure-eight-legs", "first-touch-turn", "first-touch-and-go",
         "control-and-move", "step-over-past-cone", "juggling-laces",
+    ], [
+        "foundations", "step-over-past-cone", "sprint-to-the-ball",
+        "juggle-and-catch", "weak-foot-control", "freestyle-five",
     ]),
     (4, "Dribbling + passing", 30, False, False, [
         "toe-taps", "inside-outside-cuts", "figure-eight-dribble",
         "driven-pass", "target-passing", "thigh-juggles",
+    ], [
+        "weak-foot-taps", "cone-slalom", "figure-eight-dribble",
+        "two-touch-wall-pass", "low-juggles", "wall-target-challenge",
     ]),
     (5, "Shooting + speed", 30, False, False, [
         "weak-foot-taps", "turn-and-shoot", "low-driven-shot",
         "alternate-foot-juggles", "drag-back-escape", "beat-the-clock",
+    ], [
+        "sole-rolls", "corner-placement", "turn-and-shoot", "standing-start",
+        "drag-back-escape", "thigh-juggles",
     ]),
-    (6, "Weak foot + freestyle", 30, False, False, [
-        "sole-rolls", "weak-foot-finish", "cone-slalom", "weak-foot-control",
-        "drag-backs", "weak-foot-juggles",
-    ]),
+    (6, "Rest day", 0, True, False, [], []),
 ]
 
 BADGES = [
@@ -753,7 +785,9 @@ class Command(BaseCommand):
         plan, _ = TrainingPlan.objects.update_or_create(
             name=PLAN_NAME, defaults={"is_active": True}
         )
-        for weekday, label, minutes, is_rest, is_optional, slugs in PLAN_DAYS:
+        for (
+            weekday, label, minutes, is_rest, is_optional, week_a, week_b
+        ) in PLAN_DAYS:
             day, _ = PlanDay.objects.update_or_create(
                 plan=plan,
                 weekday=weekday,
@@ -767,10 +801,14 @@ class Command(BaseCommand):
             # Rebuild the running order from scratch so re-seeding cannot
             # leave stale or duplicated entries behind.
             day.items.all().delete()
-            for order, slug in enumerate(slugs, start=1):
-                PlanDrill.objects.create(
-                    plan_day=day, drill=Drill.objects.get(slug=slug), order=order
-                )
+            for week, slugs in ((PlanDrill.WEEK_A, week_a), (PlanDrill.WEEK_B, week_b)):
+                for order, slug in enumerate(slugs, start=1):
+                    PlanDrill.objects.create(
+                        plan_day=day,
+                        drill=Drill.objects.get(slug=slug),
+                        order=order,
+                        week=week,
+                    )
 
     def _seed_profiles(self):
         """Create Will's profile if it is missing.

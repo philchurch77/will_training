@@ -191,11 +191,22 @@ from scratch. It leaves his session history alone.
 | Thu | First touch + speed | 30 min |
 | Fri | Dribbling + passing | 30 min |
 | Sat | Shooting + speed | 30 min |
-| Sun | Weak foot + freestyle | 30 min |
+| Sun | **Rest** | - |
 
-There is no academy and there are no matches over the summer, so all seven days
-are full sessions of the same 30 minutes and every one of them counts towards
-the streak. Every drill is five minutes, so a day is simply six of them: a
+**Every day runs two sessions and alternates between them.** Week A and week B
+have the same shape - same label, same skills, speed on the same three days -
+but different drills, so Monday is not the same six drills for six months.
+Across the fortnight all 50 drills get used; a single week could only ever
+reach 36 of them. Coach shows one week at a time, and says which one you are
+in.
+
+**Sunday is a rest day.** Seven days out of seven left him nowhere to recover,
+and the streak - which breaks on a missed required day - was quietly pushing
+him to train anyway. Rest days are skipped by the streak entirely, so taking it
+costs him nothing. That is 180 minutes of home training a week.
+
+There is no academy and there are no matches over the summer, so the other six
+days are full sessions of the same 30 minutes. Every drill is five minutes, so a day is simply six of them: a
 ball-mastery warm-up on the floor, four technical drills, then a fun finisher.
 Every session includes explicit weak-foot work, and every session includes
 juggling - usually as the finisher, because keepy-ups are the one thing he will
@@ -205,9 +216,9 @@ Speed sits on three of those days — Tuesday, Thursday and Saturday. It is the
 one thing in the app that tires him rather than teaches him, so no session
 carries two speed blocks and it never takes the warm-up slot.
 
-That is 210 minutes of home training a week, with no light day in it. It is a
-lot for a nine-year-old. If he starts looking tired or bored, open Coach, pick a
-day and tick **Rest day** — two taps, and his streak is unaffected.
+That is still a lot for a nine-year-old. If he starts looking tired or bored,
+open Coach, pick another day and tick **Rest day** — two taps, and his streak
+is unaffected.
 
 When the season restarts, put Friday and Saturday back to **Optional** in Coach
 (or set `is_optional` on weekdays 4 and 5 in `PLAN_DAYS`) and trim their targets:
@@ -242,6 +253,17 @@ he did not - which is every day before this existed - each drill is worth its
 planned length, exactly as before, so his history never moves. Clock time on a
 day with no ticks counts for nothing, and a clock left running is capped at
 three hours.
+
+### Records
+
+Rep drills — the juggling ones, hitting the target — keep his best ever
+score. The drill says *Your best: 26 — go and beat it* instead of the target it
+shipped with, the counter says *New record!* the moment he goes past it, and
+beating one puts a trophy card on Today. **My records** on the Progress screen is
+the whole board, biggest number first.
+
+Those scores were already being written to the database and never shown back to
+him, which is the one thing that makes a rep drill worth doing twice.
 
 ### How the streak works
 

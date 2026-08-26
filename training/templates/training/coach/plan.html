@@ -11,22 +11,25 @@
   </div>
 {% else %}
   <h1>{{ plan.name }}</h1>
-  <p class="muted">Tap a day to change its drills, order or target time.</p>
+  <p class="muted">
+    Tap a day to change its drills, order or target time. Every day runs two
+    sessions and alternates between them - this is <strong>week {{ this_week }}</strong>.
+  </p>
 
-  {% for day in days %}
-    <a class="day-link" href="{% url 'training:coach_plan_day' day.weekday %}">
+  {% for row in rows %}
+    <a class="day-link" href="{% url 'training:coach_plan_day' row.day.weekday %}">
       <span>
-        <span class="day-name">{{ day.get_weekday_display }}</span>
+        <span class="day-name">{{ row.day.get_weekday_display }}</span>
         <span class="day-sub">
-          {{ day.label }}
-          {% if day.is_rest %} &middot; rest
-          {% else %} &middot; {{ day.items.count }} drill{{ day.items.count|pluralize }}
-            &middot; {{ day.target_minutes }} min{% endif %}
+          {{ row.day.label }}
+          {% if row.day.is_rest %} &middot; rest
+          {% else %} &middot; A: {{ row.week_a }} &middot; B: {{ row.week_b }}
+            &middot; {{ row.day.target_minutes }} min{% endif %}
         </span>
       </span>
       <span>
-        {% if day.is_rest %}<span class="pill pill-rest">Rest</span>
-        {% elif day.is_optional %}<span class="pill pill-optional">Optional</span>{% endif %}
+        {% if row.day.is_rest %}<span class="pill pill-rest">Rest</span>
+        {% elif row.day.is_optional %}<span class="pill pill-optional">Optional</span>{% endif %}
         <span class="chev">&rsaquo;</span>
       </span>
     </a>

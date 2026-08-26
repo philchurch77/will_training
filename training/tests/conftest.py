@@ -85,6 +85,46 @@ def plan(db, drill):
 
 
 @pytest.fixture
+def fortnight(db, skill):
+    """A one-day plan whose Monday alternates between two sessions.
+
+    Deliberately tiny: a fixture drill that runs every week, and one drill for
+    each half of the fortnight, which is the smallest thing that can tell the
+    two apart.
+    """
+    from training.models import PlanDrill
+
+    def make(slug, name):
+        return Drill.objects.create(
+            name=name, slug=slug, skill=skill,
+            instructions="Do the thing.", cue="Head up", duration_minutes=5,
+        )
+
+    plan = TrainingPlan.objects.create(name="Fortnight", is_active=True)
+    monday = PlanDay.objects.create(
+        plan=plan, weekday=0, label="Session", target_minutes=10
+    )
+    PlanDrill.objects.create(
+        plan_day=monday, drill=make("test-every-week", "Every week"),
+        order=1, week=PlanDrill.EVERY_WEEK,
+    )
+    PlanDrill.objects.create(
+        plan_day=monday, drill=make("test-week-a", "Week A only"),
+        order=2, week=PlanDrill.WEEK_A,
+    )
+    PlanDrill.objects.create(
+        plan_day=monday, drill=make("test-week-b", "Week B only"),
+        order=2, week=PlanDrill.WEEK_B,
+    )
+    # Every other day off, so a perfect week is decided by Monday alone.
+    for weekday in range(1, 7):
+        PlanDay.objects.create(
+            plan=plan, weekday=weekday, label="Rest", is_rest=True, target_minutes=0
+        )
+    return plan
+
+
+@pytest.fixture
 def seeded(db):
     """The real starter data, as the seed command produces it."""
     from django.core.management import call_command

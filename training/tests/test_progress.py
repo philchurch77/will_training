@@ -152,6 +152,128 @@ class TestMonthlyAndTotals:
         assert progress.drills_completed(will) == 2
 
 
+class TestFortnight:
+    """Each day runs two sessions and alternates between them.
+
+    The point is variety - one week can only reach 36 of the 50 drills - but
+    the machinery has to be exact, because the perfect-week badge asks whether
+    he did *that* week's session, not the other one.
+    """
+
+    def test_consecutive_weeks_alternate(self, db):
+        for offset in range(0, 70, 7):
+            first = MONDAY + timedelta(days=offset)
+            second = first + timedelta(days=7)
+            assert progress.week_of(first) != progress.week_of(second)
+
+    def test_a_whole_week_sits_in_one_half_of_the_fortnight(self, db):
+        """Mon to Sun must not straddle the two, or the perfect-week badge
+        would be asking for half of each session."""
+        for offset in range(0, 28, 7):
+            monday = MONDAY + timedelta(days=offset)
+            week = {
+                progress.week_of(monday + timedelta(days=n)) for n in range(7)
+            }
+            assert len(week) == 1, monday
+
+    def test_the_year_boundary_does_not_repeat_a_week(self, db):
+        """ISO week numbers would: some years have 53 of them, so weeks 53 and
+        1 are both odd and he would get the same session twice running."""
+        for monday in (date(2026, 12, 21), date(2026, 12, 28), date(2027, 1, 4)):
+            nxt = monday + timedelta(days=7)
+            assert progress.week_of(monday) != progress.week_of(nxt), monday
+
+    def test_the_session_changes_from_one_week_to_the_next(self, will, fortnight):
+        this_week = [d.slug for d in progress.session_for(MONDAY)[1]]
+        next_week = [d.slug for d in progress.session_for(MONDAY + timedelta(days=7))[1]]
+
+        assert this_week != next_week
+        assert "test-every-week" in this_week and "test-every-week" in next_week
+        assert set(this_week) | set(next_week) == {
+            "test-every-week", "test-week-a", "test-week-b",
+        }
+
+    def test_a_perfect_week_means_that_week_s_session(self, will, fortnight):
+        """Doing week A's drills during a week B is not a perfect week - it is
+        the wrong session."""
+        from training.models import Drill, PlanDrill
+
+        # Find a Monday that is week A, then do week B's session in it.
+        monday = MONDAY
+        if progress.week_of(monday) != PlanDrill.WEEK_A:
+            monday += timedelta(days=7)
+        assert progress.week_of(monday) == PlanDrill.WEEK_A
+
+        tick(will, Drill.objects.get(slug="test-week-b"), monday)
+        tick(will, Drill.objects.get(slug="test-every-week"), monday)
+        assert progress.perfect_weeks(will, monday + timedelta(days=6)) == 0
+
+    def test_doing_the_right_session_earns_the_perfect_week(self, will, fortnight):
+        from training.models import Drill, PlanDrill
+
+        week = progress.week_of(MONDAY)
+        right = Drill.objects.get(
+            slug="test-week-a" if week == PlanDrill.WEEK_A else "test-week-b"
+        )
+        tick(will, right, MONDAY)
+        tick(will, Drill.objects.get(slug="test-every-week"), MONDAY)
+        assert progress.perfect_weeks(will, MONDAY + timedelta(days=6)) == 1
+
+
+class TestPersonalBests:
+    """His own number is the one worth beating.
+
+    The counts were being written to the database and never shown back to him,
+    which is the one thing that makes a rep drill worth doing twice.
+    """
+
+    def test_the_best_count_wins(self, will, plan, rep_drill):
+        tick(will, rep_drill, MONDAY, actual_reps=18)
+        tick(will, rep_drill, TUESDAY, actual_reps=31)
+        tick(will, rep_drill, WEDNESDAY, actual_reps=24)
+        assert progress.personal_best(will, rep_drill) == 31
+
+    def test_no_score_yet_is_none_not_zero(self, will, plan, rep_drill):
+        tick(will, rep_drill, MONDAY)  # ticked off without counting
+        assert progress.personal_best(will, rep_drill) is None
+
+    def test_a_timed_drill_has_no_best(self, will, plan, drill):
+        assert progress.personal_best(will, drill) is None
+
+    def test_a_day_can_be_left_out_of_the_reckoning(self, will, plan, rep_drill):
+        """Today's row is overwritten by the tick, so working out whether the
+        number he just posted is a record means reading the best without it."""
+        tick(will, rep_drill, MONDAY, actual_reps=40)
+        tick(will, rep_drill, TUESDAY, actual_reps=12)
+        assert progress.personal_best(will, rep_drill, before=TUESDAY) == 40
+
+    def test_the_record_board_skips_drills_he_has_never_counted(
+        self, will, plan, drill, rep_drill
+    ):
+        tick(will, rep_drill, MONDAY, actual_reps=22)
+        tick(will, drill, MONDAY, actual_minutes=5)
+
+        rows = progress.best_scores(will)
+        assert [r["drill"] for r in rows] == [rep_drill]
+        assert rows[0]["best"] == 22
+
+    def test_the_board_leads_with_his_biggest_number(self, will, plan, skill):
+        from training.models import Drill
+
+        second = Drill.objects.create(
+            name="Thigh juggles", slug="test-thigh", skill=skill,
+            instructions="Juggle.", cue="Flat thigh", target_reps=20,
+        )
+        third = Drill.objects.create(
+            name="Low juggles", slug="test-low", skill=skill,
+            instructions="Juggle low.", cue="Small touches", target_reps=20,
+        )
+        tick(will, second, MONDAY, actual_reps=9)
+        tick(will, third, MONDAY, actual_reps=44)
+
+        assert [r["best"] for r in progress.best_scores(will)] == [44, 9]
+
+
 class TestMinutesBySkill:
     def test_includes_skills_with_nothing_done(self, will, plan, drill, seeded=None):
         from training.models import Skill

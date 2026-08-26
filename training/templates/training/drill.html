@@ -37,10 +37,15 @@
       it, then tick it off.
     </p>
   {% else %}
-    <p class="count-target">Today's target: {{ drill.target_reps }}</p>
+    {% if best %}
+      <p class="count-target">Your best: <strong>{{ best }}</strong> - go and beat it</p>
+    {% else %}
+      <p class="count-target">Today's target: {{ drill.target_reps }}</p>
+    {% endif %}
     <div class="counter">
       <button class="count-btn" id="minus" type="button" aria-label="One less">&minus;</button>
-      <div class="count-val" id="count" data-target="{{ drill.target_reps }}">0</div>
+      <div class="count-val" id="count" data-target="{{ drill.target_reps }}"
+           data-best="{{ best|default_if_none:0 }}">0</div>
       <button class="count-btn" id="plus" type="button" aria-label="One more">+</button>
     </div>
     <p class="muted center" id="countnote" style="margin:0">

@@ -35,16 +35,24 @@
   var note = document.getElementById('countnote');
   var value = 0;
   var target = parseInt(count.dataset.target, 10) || 0;
+  var best = parseInt(count.dataset.best, 10) || 0;
 
   function render() {
     count.textContent = String(value);
     repsField.value = String(value);
+    // A record beats a target: the number to beat is his own, not the
+    // one the drill shipped with.
+    var record = best && value > best;
     var beaten = target && value >= target;
-    count.classList.toggle('is-beaten', !!beaten);
+    count.classList.toggle('is-beaten', !!(record || beaten));
     if (note) {
-      note.textContent = beaten
-        ? 'Target beaten. Keep going and see how far you get.'
-        : 'Tap the plus every time you get one.';
+      if (record) {
+        note.textContent = 'New record! Keep going.';
+      } else if (beaten) {
+        note.textContent = 'Target beaten. Keep going and see how far you get.';
+      } else {
+        note.textContent = 'Tap the plus every time you get one.';
+      }
     }
   }
 

@@ -10,7 +10,7 @@ import pytest
 from django.core.management import call_command
 
 from training import progress
-from training.models import Badge, Drill, PlanDay, Skill, TrainingPlan
+from training.models import Badge, Drill, PlanDay, PlanDrill, Skill, TrainingPlan
 
 pytestmark = pytest.mark.django_db
 
@@ -58,6 +58,25 @@ BANNED_TRAINING = [
     "lap of the park",
     "long run",
 ]
+
+
+def sessions(plan):
+    """Every session in the fortnight: twelve of them, not six.
+
+    Each day holds two running orders and alternates between them, so a rule
+    checked against `day.items` would be checking both weeks jammed together
+    and would miss a week B that had drifted. Everything below is asserted
+    against each session as Will actually meets it.
+    """
+    for day in plan.days.all():
+        if not day.is_required:
+            continue
+        for week, letter in ((PlanDrill.WEEK_A, "A"), (PlanDrill.WEEK_B, "B")):
+            yield (
+                f"{day.get_weekday_display()} week {letter}",
+                day,
+                day.drills_for_week(week),
+            )
 
 
 class TestSeedShape:
@@ -198,47 +217,65 @@ class TestWeeklyPlan:
     def test_it_covers_all_seven_days(self, seeded):
         assert set(seeded.days.values_list("weekday", flat=True)) == set(range(7))
 
-    def test_every_day_carries_required_work(self, seeded):
-        """Preseason: no academy and no matches, so all seven days are full."""
+    def test_six_sessions_and_one_day_off(self, seeded):
+        """Preseason: no academy and no matches, so six days are full sessions
+        and the seventh is a real rest day.
+
+        Seven days out of seven left him nowhere to recover, and the streak -
+        which breaks on a missed required day - was pushing him to train
+        anyway. A rest day is skipped by the streak walk, so taking it costs
+        him nothing.
+        """
         required = [d for d in seeded.days.all() if d.is_required]
-        assert len(required) == 7
+        rest = [d for d in seeded.days.all() if d.is_rest]
+        assert len(required) == 6
+        assert len(rest) == 1
+        assert rest[0].weekday == 6, "the day off should be Sunday"
+        assert not rest[0].items.exists(), "a rest day should carry no drills"
 
     def test_every_session_is_six_drills(self, seeded):
+        for name, _day, drills in sessions(seeded):
+            assert len(drills) == 6, f"{name} has {len(drills)}"
+
+    def test_no_session_repeats_a_drill(self, seeded):
+        for name, _day, drills in sessions(seeded):
+            slugs = [d.slug for d in drills]
+            assert len(set(slugs)) == len(slugs), f"{name} repeats a drill"
+
+    def test_the_fortnight_uses_the_whole_library(self, seeded):
+        """The reason there are two weeks at all: one week can only reach 36 of
+        the 50 drills, so the rest sat in the library never being trained."""
+        used = {d.slug for _n, _day, drills in sessions(seeded) for d in drills}
+        unused = set(Drill.objects.active().values_list("slug", flat=True)) - used
+        assert not unused, f"never trained: {sorted(unused)}"
+
+    def test_the_two_weeks_are_not_the_same_session(self, seeded):
         for day in seeded.days.all():
             if not day.is_required:
                 continue
-            count = day.items.count()
-            assert count == 6, f"{day.get_weekday_display()} has {count}"
+            a = [d.slug for d in day.drills_for_week(PlanDrill.WEEK_A)]
+            b = [d.slug for d in day.drills_for_week(PlanDrill.WEEK_B)]
+            assert a != b, f"{day.get_weekday_display()} is identical both weeks"
 
     def test_every_session_lands_between_25_and_30_minutes(self, seeded):
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            total = sum(item.drill.estimated_minutes for item in day.items.all())
-            assert 25 <= total <= 30, (
-                f"{day.get_weekday_display()} is {total} minutes"
-            )
+        for name, _day, drills in sessions(seeded):
+            total = sum(d.estimated_minutes for d in drills)
+            assert 25 <= total <= 30, f"{name} is {total} minutes"
 
-    def test_the_week_is_balanced_at_30_minutes_a_day(self, seeded):
-        """Preseason ask: the same 30 minutes every day, no light days."""
-        for day in seeded.days.all():
-            total = sum(item.drill.estimated_minutes for item in day.items.all())
-            assert total == 30, f"{day.get_weekday_display()} is {total} minutes"
+    def test_every_training_day_is_the_same_30_minutes(self, seeded):
+        """Preseason ask: no light days among the days he does train."""
+        for name, _day, drills in sessions(seeded):
+            total = sum(d.estimated_minutes for d in drills)
+            assert total == 30, f"{name} is {total} minutes"
 
     def test_the_target_minutes_match_the_drills(self, seeded):
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            total = sum(item.drill.estimated_minutes for item in day.items.all())
-            assert abs(total - day.target_minutes) <= 5, day.get_weekday_display()
+        for name, day, drills in sessions(seeded):
+            total = sum(d.estimated_minutes for d in drills)
+            assert abs(total - day.target_minutes) <= 5, name
 
     def test_every_session_includes_weak_foot_work(self, seeded):
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            assert any(item.drill.weak_foot for item in day.items.all()), (
-                f"{day.get_weekday_display()} has no weak foot work"
-            )
+        for name, _day, drills in sessions(seeded):
+            assert any(d.weak_foot for d in drills), f"{name} has no weak foot work"
 
     def test_every_session_includes_juggling(self, seeded):
         """The brief: keepy-ups are a fixture, not an extra.
@@ -246,52 +283,50 @@ class TestWeeklyPlan:
         They are the one thing he will keep doing for the fun of it, and they
         are pure first touch, so every session carries one.
         """
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            assert any(item.drill.is_juggling for item in day.items.all()), (
-                f"{day.get_weekday_display()} has no juggling"
-            )
+        for name, _day, drills in sessions(seeded):
+            assert any(d.is_juggling for d in drills), f"{name} has no juggling"
 
     def test_no_session_is_mostly_juggling(self, seeded):
         """One block. Juggling is not a substitute for the rest of the session."""
-        for day in seeded.days.all():
-            count = sum(1 for item in day.items.all() if item.drill.is_juggling)
-            assert count == 1, f"{day.get_weekday_display()} has {count}"
+        for name, _day, drills in sessions(seeded):
+            count = sum(1 for d in drills if d.is_juggling)
+            assert count == 1, f"{name} has {count}"
 
     def test_every_session_starts_with_a_warm_up(self, seeded):
         """The first drill is always short ball mastery on the floor."""
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            first = day.items.order_by("order").first().drill
-            assert first.skill.slug == "ball-mastery", day.get_weekday_display()
-            assert first.estimated_minutes <= 5, day.get_weekday_display()
-            assert not first.needs_wall, day.get_weekday_display()
+        for name, _day, drills in sessions(seeded):
+            first = drills[0]
+            assert first.skill.slug == "ball-mastery", name
+            assert first.estimated_minutes <= 5, name
+            assert not first.needs_wall, name
 
     def test_every_session_ends_with_a_fun_finisher(self, seeded):
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            last = day.items.order_by("order").last().drill
-            assert last.is_fun, f"{day.get_weekday_display()} has no fun finisher"
+        for name, _day, drills in sessions(seeded):
+            assert drills[-1].is_fun, f"{name} has no fun finisher"
 
-    def test_the_whole_week_uses_every_skill(self, seeded):
-        used = set()
-        for day in seeded.days.all():
-            for item in day.items.all():
-                used.add(item.drill.skill.slug)
-        assert len(used) == 7, f"unused skills: {set(Skill.objects.values_list('slug', flat=True)) - used}"
+    def test_every_week_uses_every_skill(self, seeded):
+        """Each week on its own, not just the fortnight - a week that never
+        shot at anything would be a fortnight of half the shooting practice."""
+        for week in (PlanDrill.WEEK_A, PlanDrill.WEEK_B):
+            used = {
+                d.skill.slug
+                for day in seeded.days.all()
+                for d in day.drills_for_week(week)
+            }
+            missing = set(Skill.objects.values_list("slug", flat=True)) - used
+            assert not missing, f"week {week}: unused skills {missing}"
 
-    def test_the_week_is_not_overloaded(self, seeded):
-        """Total required home minutes across the week, sanity bound."""
-        total = sum(
-            item.drill.estimated_minutes
-            for day in seeded.days.all()
-            if day.is_required
-            for item in day.items.all()
-        )
-        assert 190 <= total <= 220, f"{total} minutes of home training a week"
+    def test_neither_week_is_overloaded(self, seeded):
+        """Total required home minutes in a week, sanity bound."""
+        for week in (PlanDrill.WEEK_A, PlanDrill.WEEK_B):
+            total = sum(
+                d.estimated_minutes
+                for day in seeded.days.all()
+                if day.is_required
+                for d in day.drills_for_week(week)
+            )
+            # Six sessions of thirty, with Sunday off.
+            assert 160 <= total <= 190, f"week {week}: {total} minutes a week"
 
 
 class TestSpeedWork:
@@ -329,27 +364,23 @@ class TestSpeedWork:
         assert len(resting) * 2 >= len(drills), "no recovery written into the sprints"
 
     def test_speed_appears_on_three_days_a_week(self, seeded):
-        days = [
-            day
-            for day in seeded.days.all()
-            if any(item.drill.skill.slug == "speed" for item in day.items.all())
-        ]
-        assert len(days) == 3, f"speed on {len(days)} days"
+        for week in (PlanDrill.WEEK_A, PlanDrill.WEEK_B):
+            days = [
+                day
+                for day in seeded.days.all()
+                if any(d.skill.slug == "speed" for d in day.drills_for_week(week))
+            ]
+            assert len(days) == 3, f"week {week}: speed on {len(days)} days"
 
     def test_no_session_doubles_up_on_speed(self, seeded):
-        for day in seeded.days.all():
-            count = sum(
-                1 for item in day.items.all() if item.drill.skill.slug == "speed"
-            )
-            assert count <= 1, f"{day.get_weekday_display()} has {count} speed drills"
+        for name, _day, drills in sessions(seeded):
+            count = sum(1 for d in drills if d.skill.slug == "speed")
+            assert count <= 1, f"{name} has {count} speed drills"
 
     def test_speed_never_replaces_the_warm_up(self, seeded):
         """Cold sprinting is how something gets pulled. Ball mastery comes first."""
-        for day in seeded.days.all():
-            if not day.is_required:
-                continue
-            first = day.items.order_by("order").first().drill
-            assert first.skill.slug != "speed", day.get_weekday_display()
+        for name, _day, drills in sessions(seeded):
+            assert drills[0].skill.slug != "speed", name
 
 
 class TestIdempotency:

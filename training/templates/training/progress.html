@@ -53,6 +53,35 @@
   </div>
 </div>
 
+{% if best_rows %}
+  <div class="card">
+    <h2>My records</h2>
+    <p class="muted" style="font-size:15px">
+      Your best ever on the drills you count. Beat one today.
+    </p>
+    <ul class="records">
+      {% for row in best_rows %}
+        <li>
+          <a class="record" href="{% url 'training:drill' row.drill.slug %}">
+            <span class="record-num">{{ row.best }}</span>
+            <span class="record-main">
+              <span class="drill-name">{{ row.drill.name }}</span>
+              <span class="drill-meta">
+                {% if row.best >= row.target %}
+                  <span>target {{ row.target }} beaten</span>
+                {% else %}
+                  <span>{{ row.target }} to aim at</span>
+                {% endif %}
+              </span>
+            </span>
+            <span class="chev" aria-hidden="true">&rsaquo;</span>
+          </a>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
 <div class="card">
   <h2>Badges</h2>
   <div class="badge-grid">

@@ -224,9 +224,15 @@ class PlanDay(models.Model):
     def __str__(self):
         return f"{self.get_weekday_display()} - {self.label}"
 
-    @property
-    def drills(self):
-        return [item.drill for item in self.items.select_related("drill__skill")]
+    def drills_for_week(self, week):
+        """The running order for one half of the fortnight.
+
+        Takes PlanDrill.WEEK_A or WEEK_B. Fixtures (EVERY_WEEK) appear in both.
+        """
+        items = self.items.filter(
+            models.Q(week=PlanDrill.EVERY_WEEK) | models.Q(week=week)
+        ).select_related("drill__skill").order_by("order", "pk")
+        return [item.drill for item in items]
 
     @property
     def is_required(self):
@@ -235,14 +241,34 @@ class PlanDay(models.Model):
 
 
 class PlanDrill(models.Model):
-    """A drill's place in a day's running order."""
+    """A drill's place in a day's running order.
+
+    A day holds two running orders, not one. `week` says which half of the
+    fortnight this drill belongs to, so Monday alternates between two sessions
+    instead of being the same six drills for six months. EVERY_WEEK is for a
+    drill that should be a fixture whichever week it is.
+    """
+
+    EVERY_WEEK = 0
+    WEEK_A = 1
+    WEEK_B = 2
+    WEEK_CHOICES = [
+        (EVERY_WEEK, "Every week"),
+        (WEEK_A, "Week A"),
+        (WEEK_B, "Week B"),
+    ]
 
     plan_day = models.ForeignKey(PlanDay, on_delete=models.CASCADE, related_name="items")
     drill = models.ForeignKey(Drill, on_delete=models.CASCADE, related_name="plan_uses")
     order = models.PositiveSmallIntegerField(default=0)
+    week = models.PositiveSmallIntegerField(
+        choices=WEEK_CHOICES,
+        default=EVERY_WEEK,
+        help_text="Which week of the fortnight this drill is part of.",
+    )
 
     class Meta:
-        ordering = ["order", "pk"]
+        ordering = ["week", "order", "pk"]
 
     def __str__(self):
         return f"{self.plan_day} #{self.order}: {self.drill}"

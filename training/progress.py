@@ -7,8 +7,21 @@ month ends and rest days is provable.
 
 from datetime import timedelta
 
+from django.db.models import Max
 
-from .models import Badge, EarnedBadge, SessionClock, SessionLog, Skill, TrainingPlan
+
+from django.db.models import Q
+
+from .models import (
+    Badge,
+    Drill,
+    PlanDrill,
+    EarnedBadge,
+    SessionClock,
+    SessionLog,
+    Skill,
+    TrainingPlan,
+)
 
 # How far back current_streak() will walk before giving up. A 9-year-old is not
 # going to beat this, and it stops a pathological loop if data goes strange.
@@ -17,6 +30,16 @@ MAX_STREAK_LOOKBACK_DAYS = 800
 DONE = "done"
 REST = "rest"
 MISSED = "missed"
+
+
+def week_of(day):
+    """Which half of the fortnight a date falls in: PlanDrill.WEEK_A or WEEK_B.
+
+    Monday-aligned and continuous - ordinal 1 was itself a Monday - so unlike
+    ISO week numbers this never repeats a week at a year boundary, and every
+    day of a Monday-to-Sunday week is always in the same half.
+    """
+    return PlanDrill.WEEK_A if ((day.toordinal() - 1) // 7) % 2 == 0 else PlanDrill.WEEK_B
 
 
 def plan_day_for(day, plan=None):
@@ -119,6 +142,38 @@ def drills_completed(athlete):
     return SessionLog.objects.filter(athlete=athlete, completed=True).count()
 
 
+def personal_best(athlete, drill, before=None):
+    """His best count on a rep drill, or None if he has never counted one.
+
+    `before` leaves out one day, which is how a completion works out whether
+    the number he has just posted is a new record: the row for today is
+    overwritten by the tick, so the old best has to be read without it.
+    """
+    if drill.is_timed:
+        return None
+    logs = SessionLog.objects.filter(
+        athlete=athlete, drill=drill, completed=True, actual_reps__isnull=False
+    )
+    if before is not None:
+        logs = logs.exclude(date=before)
+    return logs.aggregate(best=Max("actual_reps"))["best"]
+
+
+def best_scores(athlete):
+    """Every rep drill he has a score on, best first. His record board.
+
+    Only drills he has actually counted appear - a board of empty rows is not
+    a thing to be proud of.
+    """
+    rows = []
+    for drill in Drill.objects.active().filter(target_reps__isnull=False):
+        best = personal_best(athlete, drill)
+        if best:
+            rows.append({"drill": drill, "best": best, "target": drill.target_reps})
+    rows.sort(key=lambda row: (-row["best"], row["drill"].name))
+    return rows
+
+
 def juggling_sessions(athlete):
     return SessionLog.objects.filter(
         athlete=athlete, completed=True, drill__is_juggling=True
@@ -186,8 +241,8 @@ def total_minutes(athlete):
     return round(sum(minutes for _log, minutes in _minutes_per_log(athlete)))
 
 
-def _required_drills_by_weekday(plan=None):
-    """Weekday -> the set of drill ids that day asks for.
+def _required_drills_by_weekday(week, plan=None):
+    """Weekday -> the set of drill ids that day asks for, in one week of the two.
 
     Only required days appear. Rest and optional days are left out entirely,
     for the same reason they cannot break a streak: he is not expected to
@@ -202,9 +257,9 @@ def _required_drills_by_weekday(plan=None):
         if not plan_day.is_required:
             continue
         ids = set(
-            plan_day.items.filter(drill__is_active=True).values_list(
-                "drill_id", flat=True
-            )
+            plan_day.items.filter(drill__is_active=True)
+            .filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week))
+            .values_list("drill_id", flat=True)
         )
         if ids:
             wanted[plan_day.weekday] = ids
@@ -221,8 +276,13 @@ def perfect_weeks(athlete, today):
     stood back then - one athlete, one maintainer, and a rebuilt history is
     not worth the machinery.
     """
-    wanted = _required_drills_by_weekday()
-    if not wanted:
+    # A whole Monday-to-Sunday week sits in one half of the fortnight, so the
+    # session it should have been is decided once per week, not per day.
+    by_week = {
+        PlanDrill.WEEK_A: _required_drills_by_weekday(PlanDrill.WEEK_A),
+        PlanDrill.WEEK_B: _required_drills_by_weekday(PlanDrill.WEEK_B),
+    }
+    if not any(by_week.values()):
         return 0
 
     done = {}
@@ -238,7 +298,8 @@ def perfect_weeks(athlete, today):
     weeks = 0
     while week <= today:
         days = [week + timedelta(days=offset) for offset in range(7)]
-        if all(
+        wanted = by_week[week_of(week)]
+        if wanted and all(
             wanted[day.weekday()] <= done.get(day, set())
             for day in days
             if day.weekday() in wanted
@@ -380,6 +441,7 @@ def session_for(day, plan=None):
     items = (
         plan_day.items.select_related("drill", "drill__skill")
         .filter(drill__is_active=True)
+        .filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week_of(day)))
         .order_by("order", "pk")
     )
     return plan_day, [item.drill for item in items]

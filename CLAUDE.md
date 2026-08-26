@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 204 tests, ~77s
+uv run pytest                    # 227 tests, ~85s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -73,6 +73,18 @@ Function-based views on purpose: one maintainer, re-read in a year.
   every day before the clock existed still computes. Never make the clock
   authoritative for days without one - that would silently rewrite his history.
   Clock seconds only ever move up, and a day with no ticks is worth nothing.
+- **A day holds two sessions and alternates between them.** `PlanDrill.week`
+  is `WEEK_A`, `WEEK_B` or `EVERY_WEEK`, and `progress.week_of(date)` says
+  which half of the fortnight a date is in - Monday-aligned and continuous, so
+  a Mon-Sun week is never split and a 53-week year never repeats a session.
+  Anything reading a day's drills must go through `session_for()` or
+  `PlanDay.drills_for_week()`; `day.items` is both weeks at once and is only
+  right on the coach screens, which show one week at a time via `?week=`.
+- **`test_seed.py` asserts every rule against all twelve sessions**, not six -
+  see the `sessions()` helper. A rule checked against `day.items` would be
+  checking both weeks jammed together and would miss a week B that had drifted.
+- **The fortnight uses all 50 drills**, and a test says so. That is the whole
+  reason the second week exists: one week can only reach 36 of them.
 - **Every session carries exactly one juggling block**, flagged by
   `Drill.is_juggling` and asserted in `test_seed.py`. Keepy-ups are the thing
   he will do for the fun of it and they are pure touch work.
@@ -90,6 +102,11 @@ Function-based views on purpose: one maintainer, re-read in a year.
   done yet also does not break the streak. Preseason there are no optional days
   in the seeded plan, but the machinery stays — it is how Fri/Sat go back to
   bonus days when the season restarts.
+- **His own score is the thing to beat.** `progress.personal_best()` reads the
+  best `actual_reps` for a drill; `drill_complete` reads it *before* the tick
+  overwrites today's row, and counts anything already logged today, or ticking
+  the same number twice claims a second record. Rep targets are what the drill
+  ships with; the record is what he actually did, and it wins.
 - **A streak and a perfect week are different bars.** One drill keeps a streak
   alive; the `perfect-week` badge needs every drill of every required day for a
   whole Mon-Sun week. Both read the plan as it stands *today*, not as it stood
@@ -137,14 +154,18 @@ When editing drills, keep the principles:
 
 ### The weekly plan
 
-**Currently preseason: seven full sessions of exactly 30 minutes.** No academy
-and no matches over the summer, so Friday and Saturday are ordinary training
-days and every day counts towards the streak. 210 minutes a week. Phil chose
-this knowingly after being told it is a high load; do not quietly reduce it.
+**Currently preseason: six sessions of exactly 30 minutes, Sunday off.** No
+academy and no matches over the summer, so Friday and Saturday are ordinary
+training days. 180 minutes a week. Sunday is a real rest day, added
+deliberately: seven days out of seven left him nowhere to recover, and the
+streak - which breaks on a missed required day - was pushing him to train
+anyway. Do not quietly put the seventh session back, and do not cut the other
+six either.
 
 **Every drill is five minutes, so a day is six of them:** a ball-mastery
 warm-up, four technical drills, a fun finisher - and one of those six is
-always juggling. Five minutes is now a planning figure rather than something he
+always juggling. Every day has two such sessions, week A and week B, with the
+same shape and the same skills so the balance holds whichever week it is. Five minutes is now a planning figure rather than something he
 is held to: the session clock is what he actually runs against. Rep-based drills count as five
 minutes too (`Drill.estimated_minutes`), so the sum is 30 whatever mix a day is
 built from and rebalancing means swapping a drill, not doing arithmetic. That
