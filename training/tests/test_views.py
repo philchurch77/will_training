@@ -528,6 +528,81 @@ class TestTemplateComments:
                     assert "#}" in line, f"{path}:{number} opens {{# and never closes it"
 
 
+class TestSessionClockScript:
+    """A source-text test, because there is no JavaScript runner in this project.
+
+    The session clock lives in localStorage and only ever reaches the server
+    as a single number, so a double count inside session.js looks like an
+    ordinary long session to every other test in this suite. There is no node
+    on this machine and a JS test runner would mean a build step, which this
+    app deliberately does not have - so the guard reads the file and asserts
+    the shape of the fix, the way TestTemplateComments reads the templates.
+
+    The bug it guards: read() compared the server's banked seconds against
+    `state.accumulated` - the PAUSED total, which is stale by the whole
+    running portion while the clock is going - and adopted them without
+    rebasing `state.startedAt`. Every drill tick posts the elapsed seconds and
+    redirects back to Today, so on the next load the running portion was
+    counted once inside the banked figure and again by elapsed(). The clock
+    jumped by the whole session-so-far on every tick, and the inflated number
+    was banked straight back to the server: a real 30 minute session, ticked
+    every five minutes, arrived as 105 minutes.
+    """
+
+    def source(self):
+        from pathlib import Path
+
+        return Path("training/static/training/js/session.js").read_text(
+            encoding="utf-8"
+        )
+
+    def test_the_banked_value_is_compared_against_the_running_total(self):
+        # `state.accumulated` alone is the paused total. Comparing the
+        # server's figure against it while the clock runs makes this phone's
+        # own seconds, posted a moment ago, look like news from elsewhere -
+        # and adopting them is the double count.
+        import re
+
+        compact = re.sub(r"\s+", " ", self.source())
+        assert "banked > state.accumulated" not in compact, (
+            "session.js compares the server's banked seconds against the "
+            "paused total again. It must be compared against "
+            "state.accumulated + running(state), or every drill tick adds the "
+            "session so far a second time."
+        )
+        assert "running(state)" in compact, (
+            "the running(state) helper has gone - read() has nothing to add "
+            "the live portion of the clock with"
+        )
+
+    def test_adopting_a_banked_value_rebases_the_start_timestamp(self):
+        # The banked figure already contains the running portion, so leaving
+        # startedAt where it was makes elapsed() count those minutes twice.
+        import re
+
+        compact = re.sub(r"\s+", " ", self.source())
+        marker = "state.accumulated = banked;"
+        assert marker in compact, "read() no longer adopts the server's figure at all"
+        branch = compact[compact.index(marker):][:220]
+        assert "state.startedAt = Date.now()" in branch, (
+            "read() adopts the server's banked seconds without resetting "
+            "state.startedAt. The banked figure already includes the time "
+            "since the clock was started, so elapsed() will count it twice - "
+            "this is the bug that turned 30 minutes into 105."
+        )
+
+    def test_elapsed_still_clamps_to_the_maximum(self):
+        # The last line of defence: whatever the arithmetic does, a phone left
+        # running on the kitchen table never reports a nine hour session.
+        import re
+
+        compact = re.sub(r"\s+", " ", self.source())
+        assert "Math.min(MAX," in compact, (
+            "elapsed() no longer clamps to MAX - a forgotten clock can bank "
+            "an absurd session"
+        )
+
+
 class TestChrome:
     def test_the_coach_link_is_offered_on_will_screens(self, client, will, seeded):
         client.force_login(will)

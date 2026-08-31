@@ -242,6 +242,25 @@ class TestWeeklyPlan:
             slugs = [d.slug for d in drills]
             assert len(set(slugs)) == len(slugs), f"{name} repeats a drill"
 
+    def test_no_week_repeats_a_drill_across_its_days(self, seeded):
+        """Thirty-six slots, thirty-six different drills, in each week.
+
+        The one above only looks inside a single session, so a drill could sit
+        on Thursday and again on Friday and nothing would complain - and
+        back-to-back is exactly the repeat he would notice. This is also the
+        arithmetic the second week rests on: a week reaches 36 of the 50 drills
+        only if it never spends a slot twice.
+        """
+        for week, letter in ((PlanDrill.WEEK_A, "A"), (PlanDrill.WEEK_B, "B")):
+            slugs = [
+                d.slug
+                for day in seeded.days.all()
+                if day.is_required
+                for d in day.drills_for_week(week)
+            ]
+            repeated = sorted({s for s in slugs if slugs.count(s) > 1})
+            assert not repeated, f"week {letter} trains {repeated} more than once"
+
     def test_the_fortnight_uses_the_whole_library(self, seeded):
         """The reason there are two weeks at all: one week can only reach 36 of
         the 50 drills, so the rest sat in the library never being trained."""
@@ -291,6 +310,37 @@ class TestWeeklyPlan:
         for name, _day, drills in sessions(seeded):
             count = sum(1 for d in drills if d.is_juggling)
             assert count == 1, f"{name} has {count}"
+
+    def test_every_session_has_shooting_or_dribbling(self, seeded):
+        """The two things he loves and would do for the fun of it.
+
+        Mastery and touch work are the priority and they are also the part he
+        would skip if a session were nothing but them, so every day he trains
+        he meets a shot or a beat-the-cone somewhere in the six.
+        """
+        for name, _day, drills in sessions(seeded):
+            skills = {d.skill.slug for d in drills}
+            assert skills & {"shooting", "dribbling"}, (
+                f"{name} has neither shooting nor dribbling in it"
+            )
+
+    def test_shooting_and_dribbling_both_appear_across_the_fortnight(self, seeded):
+        """The rule above, on its own, is satisfied by twelve shooting
+        sessions and no dribbling at all - which is not what it is for.
+
+        Both have to keep turning up, so neither can quietly drain out of the
+        plan behind a rule that only asks for one of them.
+        """
+        shooting = 0
+        dribbling = 0
+        for _name, _day, drills in sessions(seeded):
+            skills = {d.skill.slug for d in drills}
+            if "shooting" in skills:
+                shooting += 1
+            if "dribbling" in skills:
+                dribbling += 1
+        assert shooting >= 5, f"only {shooting} of the 12 sessions shoot at anything"
+        assert dribbling >= 5, f"only {dribbling} of the 12 sessions dribble"
 
     def test_every_session_starts_with_a_warm_up(self, seeded):
         """The first drill is always short ball mastery on the floor."""

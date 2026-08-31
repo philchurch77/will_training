@@ -27,6 +27,12 @@
   // boundary the streak does rather than on the phone's idea of midnight.
   var today = (card || chip).dataset.today;
 
+  // Seconds the clock has been running since it was last started. Zero when
+  // it is paused, which is what makes `accumulated` the whole story then.
+  function running(s) {
+    return s.startedAt ? (Date.now() - s.startedAt) / 1000 : 0;
+  }
+
   function read() {
     var state;
     try {
@@ -41,9 +47,23 @@
     }
     // The server may know about more time than this phone does - a tick sent
     // from somewhere else, or localStorage cleared mid-session.
+    //
+    // Compare against the running total, not the paused one. While the clock
+    // is running `accumulated` is stale by the whole running portion, so the
+    // seconds this phone itself posted a moment ago would always look like
+    // news from elsewhere. And rebase the start timestamp when adopting: the
+    // banked figure already contains the running portion, so leaving
+    // `startedAt` where it was makes elapsed() count those minutes twice.
+    // That is what made the clock jump on every tick - a tick banks the
+    // elapsed time and reloads Today, and the jump was the whole session so
+    // far, again.
     if (card) {
       var banked = parseInt(card.dataset.seconds, 10) || 0;
-      if (banked > state.accumulated) { state.accumulated = banked; }
+      var local = state.accumulated + running(state);
+      if (banked > local) {
+        state.accumulated = banked;
+        if (state.startedAt) { state.startedAt = Date.now(); }
+      }
     }
     return state;
   }
@@ -57,8 +77,7 @@
   var state = read();
 
   function elapsed() {
-    var extra = state.startedAt ? (Date.now() - state.startedAt) / 1000 : 0;
-    return Math.min(MAX, Math.round(state.accumulated + extra));
+    return Math.min(MAX, Math.round(state.accumulated + running(state)));
   }
 
   function fmt(seconds) {

@@ -25,7 +25,7 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 236 tests, ~88s
+uv run pytest                    # 243 tests, ~90s
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -59,6 +59,18 @@ Function-based views on purpose: one maintainer, re-read in a year.
   `localStorage` so it survives navigating into a drill and back). Per-drill
   countdowns were removed on purpose: a clock running down on the drill he was
   enjoying is what made him stop. Do not put one back.
+- **Adopting the server's banked seconds must rebase `startedAt`.** `read()` in
+  `session.js` takes the server's figure when it beats the phone's, for a
+  cleared `localStorage` or a tick from another device. Two rules, and getting
+  either wrong double-counts the session: compare the banked value against
+  `accumulated + running(state)`, never against `accumulated` alone, which is
+  stale by the whole running portion while the clock runs; and when adopting,
+  set `startedAt = Date.now()`, because the banked figure *already contains*
+  the time since the start. This was broken from the day the clock landed - a
+  tick banks the elapsed time and reloads Today, so every tick added the whole
+  session again and a real 30 minutes banked as 105. `TestSessionClockScript`
+  in `test_views.py` guards it by reading the source, because the bug happens
+  in the browser before the POST and no server-side test can see it.
 - **A by-hand figure is the only thing that may lower the clock.**
   `record_session_seconds(..., exact=True)`, reached by posting `minutes`
   rather than `seconds` to `session_time`. Everything else takes the larger
@@ -134,7 +146,7 @@ Function-based views on purpose: one maintainer, re-read in a year.
 
 ## The seed data is the product
 
-`seed_drills.py` is the most important file. It holds 45 drills and the weekly
+`seed_drills.py` is the most important file. It holds 50 drills and the weekly
 plan, and the coaching brief is encoded as **assertions in
 `training/tests/test_seed.py`**. Those tests fail if someone:
 
@@ -184,6 +196,17 @@ is the whole reason for the five-minute cap — keep it.
 **Speed is on weekdays 1, 3 and 5 only, one block per session.** Sprinting is
 the one thing here that tires him rather than teaches him. It never goes in the
 warm-up slot either: cold sprinting is how something gets pulled.
+
+**Every session carries at least one shooting or dribbling drill.** They are
+the two things he loves and will do for the fun of it, and a session with
+neither is a session he has to be talked into. Four days already had one;
+Monday and Thursday carry the rule deliberately in slot 5, dribbling in week A
+and shooting in week B. Swapping that slot out means swapping another of the
+two in. Both skills must stay on at least five of the twelve sessions, so the
+rule cannot be satisfied by turning the whole fortnight into shooting -
+`test_seed.py` asserts the rule and the balance. One of each *per session* was
+considered and rejected: it claims 24 of the 72 slots for 11 distinct drills,
+which strands a drill and breaks the fortnight-uses-all-50 rule.
 
 **In season**, academy and matches are Friday and Saturday: set `is_optional`
 on weekdays 4 and 5 and cut their targets back, so those two carry no required

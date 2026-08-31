@@ -606,19 +606,33 @@ PLAN_NAME = "Will's Week"
 # the library; on its own, one week could only ever reach 36 of them.
 #
 # Both weeks of a given day keep the same shape - the same label, the same
-# skills, speed on the same three days - so the balance of the fortnight is the
-# balance of either week. Swapping a drill means swapping it for one of the
-# same kind.
+# balance, speed on the same three days - so the balance of the fortnight is
+# the balance of either week. Swapping a drill means swapping it for one that
+# keeps that balance. Slot 5 on days 0 and 3 is the deliberate exception, below:
+# the skill there differs between the weeks, which is why the labels name the
+# day's theme rather than listing its skills.
+#
+# Every session carries at least one shooting or dribbling drill. Those are the
+# two things he will do for the fun of it, and a session with neither is a
+# session he has to be talked into. Monday and Thursday carry that rule in
+# slot 5 - because the other four days already had one - and the two weeks take
+# it from opposite ends so neither week doubles a drill up.
+#
+# Each week is 36 slots and 36 *distinct* drills: that is the whole reason the
+# second week exists, and it is what stops a drill landing on back-to-back
+# days. Both rules are asserted in test_seed.py. Two slots are load-bearing for
+# weak foot - day 3 week A's `weak-foot-finish` and week B's
+# `inside-outside-cuts` are the only weak-foot work in their sessions.
 #
 # (weekday, label, target_minutes, is_rest, is_optional,
 #  [week A drills], [week B drills])
 PLAN_DAYS = [
     (0, "Ball mastery + first touch", 30, False, False, [
         "foundations", "wall-control-inside", "weak-foot-control",
-        "cushion-touch", "two-touch-wall-pass", "keepy-up-record",
+        "cushion-touch", "drag-backs", "keepy-up-record",
     ], [
         "toe-taps", "thigh-control", "first-touch-turn",
-        "bouncing-control", "wall-pass-one-touch", "weak-foot-juggles",
+        "bouncing-control", "laces-technique", "weak-foot-juggles",
     ]),
     (1, "Dribbling + speed", 30, False, False, [
         "rollovers", "cone-slalom", "step-over", "speed-dribble-gate",
@@ -636,10 +650,10 @@ PLAN_DAYS = [
     ]),
     (3, "First touch + speed", 30, False, False, [
         "figure-eight-legs", "first-touch-turn", "first-touch-and-go",
-        "control-and-move", "step-over-past-cone", "juggling-laces",
+        "control-and-move", "weak-foot-finish", "juggling-laces",
     ], [
         "foundations", "step-over-past-cone", "sprint-to-the-ball",
-        "juggle-and-catch", "weak-foot-control", "freestyle-five",
+        "juggle-and-catch", "inside-outside-cuts", "freestyle-five",
     ]),
     (4, "Dribbling + passing", 30, False, False, [
         "toe-taps", "inside-outside-cuts", "figure-eight-dribble",
