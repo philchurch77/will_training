@@ -6,6 +6,21 @@
 {% block content %}
 <h1>{% if drill %}{{ drill.name }}{% else %}New drill{% endif %}</h1>
 
+{% if seeded_drill %}
+  {% comment %}
+    This drill ships in seed_drills.py, and the seeder runs on every deploy -
+    update_or_create rewrites every field here from that file, including
+    is_active, which is now driven by the RETIRED set. Saying so on the screen
+    where the edit happens, because the save looks permanent and the undo is
+    silent and days later.
+  {% endcomment %}
+  <p class="muted">
+    This drill comes from <code>seed_drills.py</code> and the next deploy
+    rewrites it from there. Edit it here to try something out; to keep a
+    change, put it in that file.
+  </p>
+{% endif %}
+
 <div class="card">
   <form method="post">
     {% csrf_token %}

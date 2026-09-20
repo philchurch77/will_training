@@ -27,6 +27,8 @@ class DrillForm(forms.ModelForm):
             "difficulty",
             "weak_foot",
             "is_fun",
+            "is_juggling",
+            "is_combination",
             "is_active",
         ]
         widgets = {

@@ -454,8 +454,21 @@ def coach_drill_edit(request, slug=None):
             return redirect("training:coach_drills")
     else:
         form = DrillForm(instance=drill)
+
+    # A drill that ships in seed_drills.py is rewritten from that file every
+    # time the seeder runs, which is on every deploy. An edit made here to one
+    # of those is a try-it-out, not a change, and the screen says so - Phil
+    # would otherwise make a coaching tweak on his phone and find it undone by
+    # a push days later with nothing to connect the two. Drills he created
+    # himself have slugs the seeder has never heard of and are left alone.
+    from .management.commands.seed_drills import DRILLS
+
+    seeded_drill = drill is not None and drill.slug in {row[0] for row in DRILLS}
+
     return render(
-        request, "training/coach/drill_form.html", {"form": form, "drill": drill}
+        request,
+        "training/coach/drill_form.html",
+        {"form": form, "drill": drill, "seeded_drill": seeded_drill},
     )
 
 

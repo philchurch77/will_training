@@ -7,12 +7,31 @@ the principles - a drill that needs a partner, a session that has crept up to
 from datetime import date
 
 import pytest
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from training import progress
-from training.models import Badge, Drill, PlanDay, PlanDrill, Skill, TrainingPlan
+from training.management.commands.seed_drills import (
+    COMBINATIONS,
+    DRILLS,
+    JUGGLING,
+    RETIRED,
+)
+from training.models import (
+    Badge,
+    Drill,
+    PlanDay,
+    PlanDrill,
+    SessionLog,
+    Skill,
+    TrainingPlan,
+)
 
 pytestmark = pytest.mark.django_db
+
+# Slug is the first column of every DRILLS tuple.
+DRILL_SLUGS = {row[0] for row in DRILLS}
 
 # Named in the brief as the staples a 9-year-old should be drilling.
 REQUIRED_STAPLES = [
@@ -80,8 +99,13 @@ def sessions(plan):
 
 
 class TestSeedShape:
-    def test_creates_between_36_and_55_drills(self, seeded):
-        assert 36 <= Drill.objects.count() <= 55
+    def test_creates_between_36_and_65_drills(self, seeded):
+        """Rows, not active drills.
+
+        Retired drills keep their row so the sessions he logged against them
+        still have something to point at, so this bound counts them too.
+        """
+        assert 36 <= Drill.objects.count() <= 65
 
     def test_creates_all_seven_skills(self, seeded):
         assert Skill.objects.count() == 7
@@ -204,6 +228,24 @@ class TestDrillQuality:
 
     def test_there_are_fun_finishers(self, seeded):
         assert Drill.objects.filter(is_fun=True).count() >= 4
+
+    def test_combination_drills_tell_him_to_walk_it_through(self, seeded):
+        """A three-move sequence at pace is the first thing he does all day.
+
+        Cold feet walk it through slowly first, for the same reason a session
+        never opens with a sprint.
+
+        This looks for "walk" and not for "slow", which is what it asked for
+        originally. "Slow" passed on a drill whose instructions merely said
+        the move would feel "slow and clumsy at first" - a description of how
+        it feels, not an instruction to take it steady. The rule is that he is
+        told to do something, so the test requires the word that tells him.
+        """
+        for drill in Drill.objects.filter(is_combination=True):
+            assert "walk" in drill.instructions.lower(), (
+                f"{drill.slug} never tells him to walk it through before "
+                "taking it up to pace"
+            )
 
     def test_difficulty_spans_the_range(self, seeded):
         levels = set(Drill.objects.values_list("difficulty", flat=True))
@@ -350,6 +392,33 @@ class TestWeeklyPlan:
             assert first.estimated_minutes <= 5, name
             assert not first.needs_wall, name
 
+    def test_most_warm_ups_are_combination_work(self, seeded):
+        """The first block is where close control is built.
+
+        Single moves on repeat are autopilot by nine on an elite squad, so the
+        warm-up is a sequence - rollover, fake, chop - joined into one flow.
+        A few simple openers stay, because the moves a combination is made of
+        are still worth five minutes of their own.
+        """
+        combos = [
+            name
+            for name, _day, drills in sessions(seeded)
+            if drills[0].is_combination
+        ]
+        assert len(combos) >= 8, (
+            f"only {len(combos)} of the 12 warm-ups chain moves together"
+        )
+
+    def test_the_fortnight_never_repeats_a_warm_up(self, seeded):
+        """Twelve sessions, twelve different openings.
+
+        The warm-up is the one slot he meets every single day, so it is the
+        one that goes stale first.
+        """
+        slugs = [drills[0].slug for _name, _day, drills in sessions(seeded)]
+        repeated = sorted({s for s in slugs if slugs.count(s) > 1})
+        assert not repeated, f"warm-up repeats in the fortnight: {repeated}"
+
     def test_every_session_ends_with_a_fun_finisher(self, seeded):
         for name, _day, drills in sessions(seeded):
             assert drills[-1].is_fun, f"{name} has no fun finisher"
@@ -466,10 +535,147 @@ class TestIdempotency:
         call_command("seed_drills", verbosity=0)
         assert authenticate(username="will", password="4321") is not None
 
-    def test_reset_rebuilds_cleanly(self, seeded):
+    def test_reset_rebuilds_cleanly(self, seeded, settings):
+        # --reset is refused unless DEBUG is on - see TestResetIsRefused
+        # below - so the developer workflow it exists for has to say so.
+        settings.DEBUG = True
         call_command("seed_drills", "--reset", verbosity=0)
-        assert 36 <= Drill.objects.count() <= 55
+        assert 36 <= Drill.objects.count() <= 65
         assert TrainingPlan.objects.filter(is_active=True).count() == 1
+
+
+class TestResetIsRefused:
+    """--reset deletes every Drill, and SessionLog.drill is CASCADE.
+
+    On Render the sqlite file on the persistent disk is the only copy of
+    Will's history. A --reset there takes every session he has ever logged
+    with it - his streak, his lifetime minutes and the counts behind his
+    badges - and none of it can be typed back in. The command refuses unless
+    DEBUG is on, which is only ever true on this machine.
+    """
+
+    # Catches the DEBUG guard being dropped, which puts --reset one typo away
+    # from wiping the live database.
+    def test_reset_is_refused_when_debug_is_off(self, seeded, settings):
+        settings.DEBUG = False
+        with pytest.raises(CommandError):
+            call_command("seed_drills", "--reset", verbosity=0)
+
+    # Catches the guard being moved below the delete. The message is not the
+    # point; the rows still being there afterwards is the point.
+    def test_a_refused_reset_deletes_no_history(self, seeded, settings):
+        settings.DEBUG = False
+        will = get_user_model().objects.get(username="will")
+        drill = Drill.objects.get(slug="toe-taps")
+        log = SessionLog.objects.create(
+            athlete=will, date=date(2026, 8, 10), drill=drill,
+            completed=True, rating=4, actual_reps=42,
+        )
+        drills_before = Drill.objects.count()
+        skills_before = Skill.objects.count()
+
+        with pytest.raises(CommandError):
+            call_command("seed_drills", "--reset", verbosity=0)
+
+        assert SessionLog.objects.filter(pk=log.pk).exists()
+        assert Drill.objects.count() == drills_before
+        assert Skill.objects.count() == skills_before
+        log.refresh_from_db()
+        assert (log.completed, log.rating, log.actual_reps) == (True, 4, 42)
+
+    # Catches the guard being widened into a blanket refusal, which would
+    # leave no way to rebuild the drills and the plan from scratch here.
+    def test_reset_still_works_in_development(self, seeded, settings):
+        settings.DEBUG = True
+        call_command("seed_drills", "--reset", verbosity=0)
+        assert Drill.objects.filter(slug="toe-taps").exists()
+
+
+class TestRetirement:
+    """A drill that has left the plan is retired, never deleted.
+
+    SessionLog.drill is CASCADE, so removing the row removes every day Will
+    logged against it. Retiring sets is_active=False and leaves the drill, its
+    text and his history exactly where they are.
+    """
+
+    # Catches a retired drill being cut from DRILLS instead of listed in
+    # RETIRED - which would take his logged sessions with it.
+    def test_retired_drills_still_exist_and_are_inactive(self, seeded):
+        for slug in ("figure-eight-legs", "weak-foot-taps"):
+            drill = Drill.objects.get(slug=slug)  # raises if it was deleted
+            assert drill.is_active is False, slug
+
+    # The most important test here: re-seeding over a retired drill must not
+    # touch what he recorded against it.
+    def test_re_seeding_keeps_the_history_logged_against_a_retired_drill(
+        self, seeded
+    ):
+        will = get_user_model().objects.get(username="will")
+        retired = Drill.objects.get(slug="figure-eight-legs")
+        log = SessionLog.objects.create(
+            athlete=will, date=date(2026, 8, 10), drill=retired,
+            completed=True, rating=5, actual_reps=31,
+        )
+
+        call_command("seed_drills", verbosity=0)
+
+        log.refresh_from_db()
+        assert (log.completed, log.rating, log.actual_reps) == (True, 5, 31)
+        assert log.drill.slug == "figure-eight-legs"
+
+    # Catches retirement that is only idempotent once - a second deploy
+    # running the seeder must not start deleting what the first one spared.
+    def test_re_seeding_twice_still_keeps_it(self, seeded):
+        will = get_user_model().objects.get(username="will")
+        retired = Drill.objects.get(slug="weak-foot-taps")
+        log = SessionLog.objects.create(
+            athlete=will, date=date(2026, 8, 11), drill=retired,
+            completed=True, rating=3, actual_reps=18,
+        )
+
+        call_command("seed_drills", verbosity=0)
+        call_command("seed_drills", verbosity=0)
+
+        log.refresh_from_db()
+        assert (log.completed, log.rating, log.actual_reps) == (True, 3, 18)
+        assert Drill.objects.get(slug="weak-foot-taps").is_active is False
+
+    # Catches a retired drill still being served to Will. Retiring has to
+    # take it out of the plan, not just flag the row.
+    def test_a_retired_drill_is_not_in_any_session(self, seeded):
+        for label, _day, drills in sessions(seeded):
+            on_show = {d.slug for d in drills}
+            assert not (on_show & RETIRED), f"{label} still runs a retired drill"
+
+
+class TestSlugSets:
+    """RETIRED, COMBINATIONS and JUGGLING are sets of slugs typed by hand.
+
+    A misspelling in any of them silently does nothing - the drill is never
+    retired, never flagged as juggling, never flagged as a combination - and
+    every other test here still passes. These fail loudly instead.
+    """
+
+    # Catches a typo in RETIRED, which would leave an outgrown drill in the
+    # plan while looking as though it had been taken out.
+    def test_every_retired_slug_names_a_real_drill(self):
+        unknown = RETIRED - DRILL_SLUGS
+        assert not unknown, f"RETIRED names slugs that are not in DRILLS: {unknown}"
+
+    # Catches a typo in COMBINATIONS, which would quietly leave a warm-up slot
+    # without the combination the plan is counting on.
+    def test_every_combination_slug_names_a_real_drill(self):
+        unknown = COMBINATIONS - DRILL_SLUGS
+        assert not unknown, (
+            f"COMBINATIONS names slugs that are not in DRILLS: {unknown}"
+        )
+
+    # Catches a typo in JUGGLING, which would leave a session with no juggling
+    # block while the flag said otherwise.
+    def test_every_juggling_slug_names_a_real_drill(self):
+        unknown = JUGGLING - DRILL_SLUGS
+        assert not unknown, f"JUGGLING names slugs that are not in DRILLS: {unknown}"
 
 
 class TestSetPin:

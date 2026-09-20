@@ -13,14 +13,20 @@ Coaching principles baked into this data, for a 9-year-old in academy football:
   the fun of it, and they are pure first touch.
 * Nothing lasts longer than five minutes. Each session is a warm-up, four
   technical drills and a fun finisher, and lands on exactly 30 minutes.
+* The warm-up is mostly combination work - moves strung together rather than
+  one move repeated - so the first block of the session is real close control.
 * One day off a week. Recovery is part of the plan, not a failure of it.
 * Instructions are written for Will to read himself.
 
-Re-running is safe: everything keys off a slug and updates in place.
+Re-running is safe: everything keys off a slug and updates in place. Nothing
+here ever deletes a drill - a drill that has left the plan goes in RETIRED and
+is deactivated, because SessionLog.drill is CASCADE and a delete would take
+the sessions he has logged against it too.
 """
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from training.models import (
@@ -111,6 +117,114 @@ DRILLS = [
         "because this is how the weak foot catches up.",
         "Only your weak foot",
         5, None, "b", 1, True, False,
+    ),
+    # Combination warm-ups. A single move on repeat is autopilot by nine on an
+    # elite squad, so the first block of the session chains moves together and
+    # makes him work on close control while he is still fresh.
+    #
+    # Three rules hold this block together, and all three are tested:
+    #
+    # 1. Every one tells him to *walk it through* - the imperative, not a note
+    #    that it will feel slow - for the same reason a session never opens
+    #    with a sprint. `test_combination_drills_tell_him_to_walk_it_through`
+    #    looks for the word "walk", because "go slowly" got satisfied once by
+    #    a drill that merely described itself as slow.
+    # 2. A move is described the same way everywhere. A chop is always cut
+    #    back with the *inside* of the foot; a step over is always stepped
+    #    with one foot and pushed away with the *outside of the other*, which
+    #    is how the `step-over` drill in Dribbling already teaches it. He
+    #    trains these on consecutive days and must not meet two versions.
+    # 3. Every move is described where it is used. He is alone in a garden,
+    #    so "do a rollover, a scissor and a chop" is no use to him unless the
+    #    drill says what those are.
+    #
+    # Graded in two rungs of four: two moves on the spot at difficulty 2,
+    # three moves at difficulty 3.
+    (
+        "rollover-chop",
+        "Rollover into a chop",
+        "ball-mastery",
+        "Roll the ball across your body with the sole of one foot. Then chop it "
+        "back the other way with the inside of your other foot. Walk it through "
+        "slowly, then speed it up. Ten leading with each foot.",
+        "Join the two moves up",
+        5, None, "b", 2, True, False,
+    ),
+    (
+        "drag-push-out",
+        "Drag back and push out",
+        "ball-mastery",
+        "Put your sole on the ball and drag it back towards you. Then push it "
+        "out to the side with the inside of that same foot. Walk it through "
+        "slowly first - it draws an L on the grass. Ten with each foot.",
+        "Draw an L with the ball",
+        5, None, "b", 2, True, False,
+    ),
+    (
+        "sole-roll-scissor",
+        "Sole roll into a step over",
+        "ball-mastery",
+        "Roll the ball across with the sole of one foot. Step your other foot "
+        "over the top of the ball without touching it. Then push the ball away "
+        "with the outside of the foot you rolled with. Walk it through slowly "
+        "both ways first.",
+        "Roll, step over, gone",
+        5, None, "b s", 2, False, False,
+    ),
+    (
+        "croqueta-chop",
+        "Croqueta and chop",
+        "ball-mastery",
+        "Push the ball sharply from the inside of one foot to the inside of the "
+        "other. That first push is a jab, not a roll. Then chop it back the way "
+        "it came with the inside of that foot. Walk it through slowly ten times "
+        "each way first.",
+        "Sharp jab, then cut it back",
+        5, None, "b", 2, True, False,
+    ),
+    (
+        "rollover-fake-chop",
+        "Rollover, fake, chop",
+        "ball-mastery",
+        "Roll the ball across with your sole. Swing your leg over it like you "
+        "are about to shoot, then chop it back with the inside of your other "
+        "foot. Walk all three moves through slowly so you know the order. Then "
+        "do ten leading with each foot.",
+        "Sell the fake in the middle",
+        5, None, "b", 3, True, False,
+    ),
+    (
+        "tap-drag-turn",
+        "Tap, drag, turn",
+        "ball-mastery",
+        "Tap the ball from the inside of one foot to the other, twice. Drag it "
+        "back with your sole, then turn away with the outside of that same "
+        "foot. Walk it through slowly, counting the four touches. Do it turning "
+        "both ways.",
+        "No pause between touches",
+        5, None, "b", 3, False, False,
+    ),
+    (
+        "combo-and-burst",
+        "Combination and burst",
+        "ball-mastery",
+        "Roll the ball across with your sole, step your other foot over it, "
+        "then chop it back with the inside of your foot. As soon as it is free, "
+        "push it forward and take three quick steps with it. Walk the moves "
+        "through slowly before you add the steps.",
+        "Finish the combination moving",
+        5, None, "b s", 3, False, False,
+    ),
+    (
+        "weak-foot-combo",
+        "Weak foot combination",
+        "ball-mastery",
+        "Use only your weaker foot. Roll the ball across, drag it back, then "
+        "push it away with the outside of that same foot. Walk the three moves "
+        "through slowly - it will feel clumsy, and that is exactly why it is "
+        "on the list.",
+        "Weak foot only",
+        5, None, "b", 3, True, False,
     ),
     (
         "freestyle-five",
@@ -574,6 +688,35 @@ JUGGLING = {
     "around-the-world",
 }
 
+# Combination work: a sequence of moves joined together, not one move on
+# repeat. Same shape as JUGGLING above, and for the same reason - the plan and
+# the tests both need to see it. Eight of the twelve warm-up slots carry one.
+COMBINATIONS = {
+    "rollover-chop",
+    "drag-push-out",
+    "sole-roll-scissor",
+    "rollover-fake-chop",
+    "tap-drag-turn",
+    "croqueta-chop",
+    "combo-and-burst",
+    "weak-foot-combo",
+}
+
+# Drills that are no longer in the plan. The tuple stays in DRILLS above, so
+# the drill keeps its text and its page for the sessions he has already logged
+# against it, and a rebuilt database looks identical to an updated one.
+# is_active=False takes it out of his library, out of the plan and out of the
+# offline precache, without deleting a row.
+#
+# This is the mechanism, and it is deliberately an explicit list rather than
+# "deactivate anything not in DRILLS": drills can be added by hand on the
+# coach screens, and a blanket update would switch those off on the next
+# deploy.
+RETIRED = {
+    "figure-eight-legs",   # a single move, and the one he had outgrown
+    "weak-foot-taps",      # replaced by weak-foot-combo
+}
+
 # PRESEASON SHAPE: six sessions of exactly 30 minutes, and Sunday off. There is
 # no academy and there are no matches over the summer, so Friday and Saturday
 # are no longer bonus days. When the season restarts, put is_optional back on
@@ -589,6 +732,14 @@ JUGGLING = {
 # warm-up on the floor, four technical drills, then a fun finisher. Rep-based
 # drills count as five minutes too, so the sum lands on 30 either way and
 # rebalancing a day means swapping a drill, not doing arithmetic.
+#
+# The warm-up slot is mostly combination work - rollover, fake, chop joined
+# into one flow - because a single move on repeat is autopilot by nine on an
+# elite squad, and the first block is where close control is actually built.
+# Eight of the twelve are combinations; four stay single moves, because the
+# moves a combination is made of are still worth five minutes of their own.
+# Twelve slots, twelve different drills: the warm-up is the one thing he meets
+# every single day, so it is the one that goes stale first.
 #
 # Speed sits on three days - Tuesday, Thursday and Saturday. It is the one
 # thing here that tires him rather than teaches him, so it is spaced out and
@@ -635,38 +786,38 @@ PLAN_DAYS = [
         "bouncing-control", "laces-technique", "weak-foot-juggles",
     ]),
     (1, "Dribbling + speed", 30, False, False, [
-        "rollovers", "cone-slalom", "step-over", "speed-dribble-gate",
+        "rollover-chop", "cone-slalom", "step-over", "speed-dribble-gate",
         "cruyff-past-cone", "around-the-world",
     ], [
-        "figure-eight-legs", "cruyff-turn", "drag-backs", "turn-and-sprint",
+        "drag-push-out", "cruyff-turn", "drag-backs", "turn-and-sprint",
         "change-of-pace", "keepy-up-record",
     ]),
     (2, "Passing + shooting", 30, False, False, [
-        "sole-rolls", "weak-foot-wall-pass", "wall-pass-one-touch",
+        "rollover-fake-chop", "weak-foot-wall-pass", "wall-pass-one-touch",
         "laces-technique", "corner-placement", "juggle-and-volley",
     ], [
-        "rollovers", "target-passing", "driven-pass", "weak-foot-finish",
+        "sole-rolls", "target-passing", "driven-pass", "weak-foot-finish",
         "low-driven-shot", "juggling-laces",
     ]),
     (3, "First touch + speed", 30, False, False, [
-        "figure-eight-legs", "first-touch-turn", "first-touch-and-go",
+        "rollovers", "first-touch-turn", "first-touch-and-go",
         "control-and-move", "weak-foot-finish", "juggling-laces",
     ], [
-        "foundations", "step-over-past-cone", "sprint-to-the-ball",
+        "sole-roll-scissor", "step-over-past-cone", "sprint-to-the-ball",
         "juggle-and-catch", "inside-outside-cuts", "freestyle-five",
     ]),
     (4, "Dribbling + passing", 30, False, False, [
-        "toe-taps", "inside-outside-cuts", "figure-eight-dribble",
+        "tap-drag-turn", "inside-outside-cuts", "figure-eight-dribble",
         "driven-pass", "target-passing", "thigh-juggles",
     ], [
-        "weak-foot-taps", "cone-slalom", "figure-eight-dribble",
+        "weak-foot-combo", "cone-slalom", "figure-eight-dribble",
         "two-touch-wall-pass", "low-juggles", "wall-target-challenge",
     ]),
     (5, "Shooting + speed", 30, False, False, [
-        "weak-foot-taps", "turn-and-shoot", "low-driven-shot",
+        "combo-and-burst", "turn-and-shoot", "low-driven-shot",
         "alternate-foot-juggles", "drag-back-escape", "beat-the-clock",
     ], [
-        "sole-rolls", "corner-placement", "turn-and-shoot", "standing-start",
+        "croqueta-chop", "corner-placement", "turn-and-shoot", "standing-start",
         "drag-back-escape", "thigh-juggles",
     ]),
     (6, "Rest day", 0, True, False, [], []),
@@ -717,6 +868,19 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if options["reset"] and not settings.DEBUG:
+            # --reset deletes every Drill, and SessionLog.drill is CASCADE, so
+            # it deletes every session Will has ever logged, his streak and the
+            # counts behind his badges. None of it can be typed back in. It is
+            # a development convenience and it has no business anywhere near
+            # the disk on Render, which is the only copy of his history.
+            raise CommandError(
+                "--reset deletes every drill, and SessionLog.drill is CASCADE, "
+                "so it would delete Will's entire training history. Refusing "
+                "on a non-DEBUG database. Retire a drill instead: add its slug "
+                "to RETIRED in this file."
+            )
+
         if options["reset"]:
             PlanDrill.objects.all().delete()
             PlanDay.objects.all().delete()
@@ -777,7 +941,11 @@ class Command(BaseCommand):
                     "weak_foot": weak_foot,
                     "is_fun": is_fun,
                     "is_juggling": slug in JUGGLING,
-                    "is_active": True,
+                    "is_combination": slug in COMBINATIONS,
+                    # Retiring a drill never deletes it: SessionLog.drill is
+                    # CASCADE, so a delete would take his logged history with
+                    # it. The row stays and goes quiet.
+                    "is_active": slug not in RETIRED,
                 },
             )
 

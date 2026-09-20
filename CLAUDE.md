@@ -22,10 +22,10 @@ uv sync                          # install
 uv run manage.py runserver       # http://127.0.0.1:8000
 uv run manage.py migrate
 uv run manage.py seed_drills     # drills, plan, badges, Will's profile
-uv run manage.py seed_drills --reset   # rebuild drills and plan from scratch
+uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see below
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 243 tests, ~90s
+uv run pytest                    # 261 tests, ~3 min
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -95,8 +95,25 @@ Function-based views on purpose: one maintainer, re-read in a year.
 - **`test_seed.py` asserts every rule against all twelve sessions**, not six -
   see the `sessions()` helper. A rule checked against `day.items` would be
   checking both weeks jammed together and would miss a week B that had drifted.
-- **The fortnight uses all 50 drills**, and a test says so. That is the whole
-  reason the second week exists: one week can only reach 36 of them.
+- **The fortnight uses every active drill**, and a test says so. That is the
+  whole reason the second week exists: one week can only reach 36 of them.
+  Currently 56 active of 58 rows - a drill added to the library must be given a
+  slot in the plan, or retired.
+- **Two things that can delete his history are held shut, deliberately.**
+  `seed_drills --reset` raises `CommandError` unless `DEBUG` is on, and
+  `SkillAdmin`/`DrillAdmin` refuse delete permission via `NoDeleteMixin`. Both
+  guard the same cascade: `Drill.skill` and `SessionLog.drill` are `CASCADE`, so
+  removing one skill in the admin, or one careless `--reset` in a Render shell,
+  takes every session he has ever logged. `test_seed.py` and `test_admin.py`
+  both fail if either guard is removed. Note `--reset` on SQLite is also how
+  `migrate` rebuilds a table: an `AddField` emits `CREATE new / INSERT SELECT /
+  DROP TABLE / RENAME`, which is safe only because Django wraps it in
+  `PRAGMA foreign_keys = OFF`. Back the disk up before migrating anyway.
+- **A deploy rebuilds the plan and discards coach edits.** `_seed_plan` does
+  `day.items.all().delete()` and rebuilds from `PLAN_DAYS` on every run, and
+  `seed_drills` runs on every Render start. Changing a day's running order on
+  Coach -> the plan screen is for trying something out; to keep it, put it in
+  `seed_drills.py`. The screen says so.
 - **Every session carries exactly one juggling block**, flagged by
   `Drill.is_juggling` and asserted in `test_seed.py`. Keepy-ups are the thing
   he will do for the fun of it and they are pure touch work.
@@ -141,6 +158,21 @@ Function-based views on purpose: one maintainer, re-read in a year.
 - **`{# #}` template comments are single-line.** Spread one over two lines and
   it is no longer a comment — the text renders onto the page, and the response
   is still a 200 so nothing looks wrong. `TestTemplateComments` guards this.
+- **A drill is retired, never deleted and never rewritten.** `SessionLog.drill`
+  is `CASCADE`, so deleting a drill takes every session he logged against it
+  with it - which is what `seed_drills --reset` does, and why that flag must
+  never reach Render. Rewriting a slug's content in place loses no rows but is
+  worse in its own way: his June logs would silently start claiming he did a
+  three-move combination. So the tuple stays in `DRILLS`, the slug goes in
+  `RETIRED`, and `is_active=False` takes it out of his library, the plan and
+  the precache while leaving the row - and his history - alone. `RETIRED` is an
+  explicit list on purpose: drills can be added by hand on the coach screens,
+  and "deactivate anything not in `DRILLS`" would switch those off on the next
+  deploy. One caveat for the next retirement: `progress.best_scores()` iterates
+  `Drill.objects.active()`, so retiring a *rep* drill takes its personal best
+  off the Progress board even though every row survives. Both drills retired so
+  far are minutes-based, where `personal_best()` returns `None` anyway, so
+  nothing is affected yet.
 - **Test fixtures use `test-` prefixed slugs** so they compose with the
   `seeded` fixture, which creates the real drills.
 
@@ -158,7 +190,10 @@ plan, and the coaching brief is encoded as **assertions in
 - drops the weak-foot work or the fun finisher from a day;
 - puts speed on more or fewer than three days, doubles it up in one session, or
   lets it take the warm-up slot;
-- breaks the warm-up-first shape, or the 36–50 drill count.
+- breaks the warm-up-first shape, or the 36–65 drill count (rows, including
+  retired ones);
+- turns the warm-up back into a single move on repeat, or repeats a warm-up
+  inside a fortnight.
 
 When editing drills, keep the principles:
 
@@ -186,7 +221,22 @@ six either.
 
 **Every drill is five minutes, so a day is six of them:** a ball-mastery
 warm-up, four technical drills, a fun finisher - and one of those six is
-always juggling. Every day has two such sessions, week A and week B, with the
+always juggling. **The warm-up is mostly combination work** - a sequence of
+moves joined into one flow, rollover into fake into chop - because a single
+move on repeat is autopilot by nine on an elite squad, and the first block is
+where close control is actually built. Eight of the twelve warm-ups are
+combinations and four stay single moves, because the moves a combination is
+made of are still worth five minutes of their own. Twelve sessions, twelve
+different openings: the warm-up is the one slot he meets every single day, so
+it is the one that goes stale first. `Drill.is_combination` flags it, fed by
+the `COMBINATIONS` slug set, and `test_seed.py` asserts both rules. A move is
+described the same way wherever it appears - a chop is always cut back with
+the inside of the foot, a step over is always stepped with one foot and pushed
+away with the outside of the other, matching the `step-over` drill in
+Dribbling - and every move a combination names is described in that drill,
+because he is alone in a garden and cannot look one up.
+
+Every day has two such sessions, week A and week B, with the
 same shape and the same skills so the balance holds whichever week it is. Five minutes is now a planning figure rather than something he
 is held to: the session clock is what he actually runs against. Rep-based drills count as five
 minutes too (`Drill.estimated_minutes`), so the sum is 30 whatever mix a day is
@@ -292,6 +342,28 @@ uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
 Production settings refuse to start without `WILL_SECRET_KEY` and `WILL_HOSTS`
 — that guard is intentional, do not soften it. Run **one gunicorn worker**: the
 login throttle keeps counters in local memory.
+
+**Back the disk up before any deploy that carries a migration.** The file at
+`/var/data/db.sqlite3` is the only copy of his history. From the Render shell,
+before triggering the deploy:
+
+```bash
+python -c "import sqlite3,datetime; s=sqlite3.connect('/var/data/db.sqlite3'); d=sqlite3.connect('/var/data/db-backup-%s.sqlite3'%datetime.date.today().isoformat()); s.backup(d); d.close(); s.close()"
+```
+
+That is SQLite's online backup API - safe while gunicorn is serving, no lock
+held, and it does not need the `sqlite3` CLI, which is not on the image. Check
+it is real rather than a zero-byte file, and write down the row counts for
+`training_sessionlog`, `training_sessionclock` and `training_earnedbadge` so
+you have something to compare against afterwards. The backup lands on the same
+disk, so it survives a bad migration but not a lost disk; pull it off the box
+if you want a real one.
+
+Worth knowing: `startCommand` is `migrate && seed_drills && gunicorn`, so a
+migration that fails takes the app down rather than serving a half-migrated
+database. That is the right failure, but it is a failure - check
+`PRAGMA foreign_key_check` comes back clean before deploying a migration that
+rebuilds a table.
 
 ## Before finishing any change
 

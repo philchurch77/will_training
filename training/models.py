@@ -107,6 +107,10 @@ class Drill(models.Model):
     is_juggling = models.BooleanField(
         default=False, help_text="Juggling or keepy-ups. Every session has one."
     )
+    is_combination = models.BooleanField(
+        default=False,
+        help_text="A sequence of moves joined together, not one move repeated.",
+    )
     is_active = models.BooleanField(default=True)
 
     objects = DrillQuerySet.as_manager()

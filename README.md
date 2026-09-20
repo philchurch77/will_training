@@ -212,6 +212,12 @@ Every session includes explicit weak-foot work, and every session includes
 juggling - usually as the finisher, because keepy-ups are the one thing he will
 keep doing for the fun of it.
 
+The warm-up is mostly combination work - a rollover into a fake into a chop,
+strung together rather than one move repeated - so the first five minutes are
+spent on close control while he is fresh. Eight of the twelve warm-ups across
+the fortnight are combinations; the other four are the simple moves those
+combinations are built from. No warm-up repeats inside a fortnight.
+
 Speed sits on three of those days — Tuesday, Thursday and Saturday. It is the
 one thing in the app that tires him rather than teaches him, so no session
 carries two speed blocks and it never takes the warm-up slot.

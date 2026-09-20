@@ -1,0 +1,6 @@
+- [Migrations read so far](migrations_read.md) — 0001-0007, one line each, and which ones rebuild a table on SQLite.
+- [Cascade map](cascades.md) — every `on_delete` in `training/models.py`, what each one would take with it, and which are accepted.
+- [Deploy data safety](deploy_data_safety.md) — what runs on Render, the unguarded `--reset`, and the backup command for the SQLite disk.
+- [Free text and round trips](free_text_fields.md) — which fields hold typed text and why the edit path is currently sound.
+- [The plan is read as it stands today](plan_has_no_history.md) — accepted consequence: changing the seeded plan re-scores past perfect weeks.
+- [Three tests fail on Sundays](sunday_test_flake.md) — a date-dependent fixture flake, not a regression. Check the weekday before blaming a diff.

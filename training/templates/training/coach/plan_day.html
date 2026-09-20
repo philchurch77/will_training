@@ -16,6 +16,18 @@
      href="?week=B">Week B</a>
 </p>
 
+{% comment %}
+  seed_drills runs on every deploy and _seed_plan rebuilds each day's running
+  order from scratch, so anything changed here is undone the next time the app
+  is pushed. Said out loud on the screen where the edit happens, because the
+  edit looks permanent and the undo is silent and days later.
+{% endcomment %}
+<p class="muted">
+  Changes here are for trying something out - the next deploy rebuilds the
+  running order from <code>seed_drills.py</code>. To keep a change, put it
+  there.
+</p>
+
 <div class="card">
   <h3>Day settings</h3>
   <form method="post">

@@ -1,0 +1,2 @@
+- [Seed data decisions](decisions_seed_data.md) — retire rather than rewrite or delete a drill; warm-up slot structure and which tests filter `is_active`.
+- [The seeder runs on Render](seeder_runs_on_render.md) — every seed edit is a live data change; `--reset` would destroy his history.
