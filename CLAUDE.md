@@ -97,7 +97,7 @@ Function-based views on purpose: one maintainer, re-read in a year.
   checking both weeks jammed together and would miss a week B that had drifted.
 - **The fortnight uses every active drill**, and a test says so. That is the
   whole reason the second week exists: one week can only reach 36 of them.
-  Currently 56 active of 58 rows - a drill added to the library must be given a
+  Currently 58 active of 66 rows - a drill added to the library must be given a
   slot in the plan, or retired.
 - **Two things that can delete his history are held shut, deliberately.**
   `seed_drills --reset` raises `CommandError` unless `DEBUG` is on, and
@@ -178,7 +178,7 @@ Function-based views on purpose: one maintainer, re-read in a year.
 
 ## The seed data is the product
 
-`seed_drills.py` is the most important file. It holds 50 drills and the weekly
+`seed_drills.py` is the most important file. It holds 66 drills and the weekly
 plan, and the coaching brief is encoded as **assertions in
 `training/tests/test_seed.py`**. Those tests fail if someone:
 
@@ -190,10 +190,11 @@ plan, and the coaching brief is encoded as **assertions in
 - drops the weak-foot work or the fun finisher from a day;
 - puts speed on more or fewer than three days, doubles it up in one session, or
   lets it take the warm-up slot;
-- breaks the warm-up-first shape, or the 36–65 drill count (rows, including
-  retired ones);
-- turns the warm-up back into a single move on repeat, or repeats a warm-up
-  inside a fortnight.
+- breaks the warm-up-first shape, or the 36–80 drill count (rows, including
+  retired ones - the bound counts rows, retirement never deletes one, so it
+  ratchets up and raising it after a batch retires is expected);
+- lets a single move on repeat back into the warm-up slot, grades a warm-up
+  easy, or repeats a warm-up inside a fortnight.
 
 When editing drills, keep the principles:
 
@@ -221,20 +222,44 @@ six either.
 
 **Every drill is five minutes, so a day is six of them:** a ball-mastery
 warm-up, four technical drills, a fun finisher - and one of those six is
-always juggling. **The warm-up is mostly combination work** - a sequence of
-moves joined into one flow, rollover into fake into chop - because a single
-move on repeat is autopilot by nine on an elite squad, and the first block is
-where close control is actually built. Eight of the twelve warm-ups are
-combinations and four stay single moves, because the moves a combination is
-made of are still worth five minutes of their own. Twelve sessions, twelve
+always juggling. **All twelve warm-ups are combination work** - a sequence of
+moves joined into one flow, step over into Cruyff, body feint into Cruyff -
+because a single move on repeat is autopilot by nine on an elite squad, and
+the first block is where close control is actually built. Four openers used to
+stay single moves, on the argument that the parts of a combination are worth
+five minutes of their own; he is a confident dribbler now and that argument
+ran out, so `toe-taps`, `sole-rolls`, `foundations` and `rollovers` are
+retired and the parts survive inside the pairs. Twelve sessions, twelve
 different openings: the warm-up is the one slot he meets every single day, so
 it is the one that goes stale first. `Drill.is_combination` flags it, fed by
-the `COMBINATIONS` slug set, and `test_seed.py` asserts both rules. A move is
-described the same way wherever it appears - a chop is always cut back with
-the inside of the foot, a step over is always stepped with one foot and pushed
-away with the outside of the other, matching the `step-over` drill in
-Dribbling - and every move a combination names is described in that drill,
-because he is alone in a garden and cannot look one up.
+the `COMBINATIONS` slug set. `test_seed.py` asserts all twelve chain moves and
+that none is graded easy - `is_combination` says the moves are joined up, not
+that they are hard, so the difficulty bar is a separate assertion.
+
+A move is described the same way wherever it appears - a chop is always cut
+back with the inside of the foot, a step over is always stepped with one foot
+and pushed away with the outside of the other, matching the `step-over` drill
+in Dribbling - and every move a combination names is described in that drill,
+because he is alone in a garden and cannot look one up. Two pairs that look
+alike are told apart out loud, and this is the part a future change will get
+wrong. **There is one chop and it is the existing one**: cut back with the
+inside of the foot, in front of him. A "Ronaldo chop" is deliberately *not*
+added under that name - the behind-the-standing-leg inside cut is already in
+the library as the Cruyff turn, and two moves under one word is exactly what
+this rule exists to stop. The Cruyff and the L-turn (`drag-back-l-turn`) both
+cut behind the standing leg with the inside of the foot; the Cruyff spins him
+away, the L-turn brings him out facing square. Because the touch is the same,
+the L-turn drill says "do not spin all the way round" out loud **and** the two
+are kept in different sessions - they were in the same one, one slot apart,
+and it read as two contradictory instructions for the same move. A **scissor**
+circles the ball and pushes away with the *same* foot, a **step over** pushes
+away with the *other* one, and the `scissors` drill says so in as many words.
+
+One more trap, learned the hard way: `is_combination` is a hand-kept set, so a
+single move dropped into a warm-up slot passes every test while claiming to be
+a chain. `double-scissor-push` is two circles and an exit precisely because one
+circle and an exit is already the `scissors` drill. Count the touches before
+adding a warm-up.
 
 Every day has two such sessions, week A and week B, with the
 same shape and the same skills so the balance holds whichever week it is. Five minutes is now a planning figure rather than something he
@@ -256,7 +281,7 @@ two in. Both skills must stay on at least five of the twelve sessions, so the
 rule cannot be satisfied by turning the whole fortnight into shooting -
 `test_seed.py` asserts the rule and the balance. One of each *per session* was
 considered and rejected: it claims 24 of the 72 slots for 11 distinct drills,
-which strands a drill and breaks the fortnight-uses-all-50 rule.
+which strands a drill and breaks the fortnight-uses-every-active-drill rule.
 
 **In season**, academy and matches are Friday and Saturday: set `is_optional`
 on weekdays 4 and 5 and cut their targets back, so those two carry no required

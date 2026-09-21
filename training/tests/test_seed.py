@@ -99,13 +99,17 @@ def sessions(plan):
 
 
 class TestSeedShape:
-    def test_creates_between_36_and_65_drills(self, seeded):
+    def test_creates_between_36_and_80_drills(self, seeded):
         """Rows, not active drills.
 
         Retired drills keep their row so the sessions he logged against them
-        still have something to point at, so this bound counts them too.
+        still have something to point at, so this bound counts them too -
+        which means the upper number can only ever ratchet up, and raising it
+        when a batch retires is expected rather than a smell. The count that
+        actually guards the shape of a session is the active one, asserted by
+        test_the_fortnight_uses_the_whole_library.
         """
-        assert 36 <= Drill.objects.count() <= 65
+        assert 36 <= Drill.objects.count() <= 80
 
     def test_creates_all_seven_skills(self, seeded):
         assert Skill.objects.count() == 7
@@ -392,22 +396,41 @@ class TestWeeklyPlan:
             assert first.estimated_minutes <= 5, name
             assert not first.needs_wall, name
 
-    def test_most_warm_ups_are_combination_work(self, seeded):
+    def test_every_warm_up_is_combination_work(self, seeded):
         """The first block is where close control is built.
 
         Single moves on repeat are autopilot by nine on an elite squad, so the
         warm-up is a sequence - rollover, fake, chop - joined into one flow.
-        A few simple openers stay, because the moves a combination is made of
-        are still worth five minutes of their own.
+        Four openers used to stay single moves, on the argument that the parts
+        of a combination are worth five minutes of their own. He is a
+        confident dribbler now and that argument has run out: the four are
+        retired and all twelve openings chain moves.
+
+        Asserted as twelve rather than "most" on purpose. A floor is what let
+        the easy ones sit there for a season without anyone noticing.
         """
-        combos = [
+        singles = [
             name
             for name, _day, drills in sessions(seeded)
-            if drills[0].is_combination
+            if not drills[0].is_combination
         ]
-        assert len(combos) >= 8, (
-            f"only {len(combos)} of the 12 warm-ups chain moves together"
+        assert not singles, (
+            f"these warm-ups are a single move on repeat: {sorted(singles)}"
         )
+
+    def test_no_warm_up_is_easy(self, seeded):
+        """The opening block is graded for the player he is, not the one he was.
+
+        is_combination says the moves are joined up; it says nothing about how
+        hard they are, and a chain of two gentle touches would satisfy it. This
+        is the bar that actually moved when he became a confident dribbler.
+        """
+        soft = [
+            f"{name}: {drills[0].slug}"
+            for name, _day, drills in sessions(seeded)
+            if drills[0].difficulty < 2
+        ]
+        assert not soft, f"warm-ups graded easy: {sorted(soft)}"
 
     def test_the_fortnight_never_repeats_a_warm_up(self, seeded):
         """Twelve sessions, twelve different openings.
@@ -540,7 +563,7 @@ class TestIdempotency:
         # below - so the developer workflow it exists for has to say so.
         settings.DEBUG = True
         call_command("seed_drills", "--reset", verbosity=0)
-        assert 36 <= Drill.objects.count() <= 65
+        assert 36 <= Drill.objects.count() <= 80
         assert TrainingPlan.objects.filter(is_active=True).count() == 1
 
 
@@ -602,7 +625,8 @@ class TestRetirement:
     # Catches a retired drill being cut from DRILLS instead of listed in
     # RETIRED - which would take his logged sessions with it.
     def test_retired_drills_still_exist_and_are_inactive(self, seeded):
-        for slug in ("figure-eight-legs", "weak-foot-taps"):
+        assert RETIRED, "nothing retired - has the list been emptied?"
+        for slug in sorted(RETIRED):
             drill = Drill.objects.get(slug=slug)  # raises if it was deleted
             assert drill.is_active is False, slug
 
@@ -641,6 +665,20 @@ class TestRetirement:
         assert (log.completed, log.rating, log.actual_reps) == (True, 3, 18)
         assert Drill.objects.get(slug="weak-foot-taps").is_active is False
 
+    # Catches a *rep* drill being retired. progress.best_scores() iterates
+    # Drill.objects.active(), so retiring one silently takes his personal
+    # best off the Progress board - every row survives, but the number he is
+    # proudest of stops being shown. Every retirement so far is minutes-based,
+    # where personal_best() is None anyway. If this fails, the retirement is
+    # not wrong - best_scores() needs to stop filtering on active() first.
+    def test_no_retired_drill_is_one_he_kept_a_score_on(self, seeded):
+        for slug in sorted(RETIRED):
+            drill = Drill.objects.get(slug=slug)
+            assert drill.target_reps is None, (
+                f"{slug} is a rep drill - retiring it drops his personal best "
+                "from the Progress board; fix best_scores() first"
+            )
+
     # Catches a retired drill still being served to Will. Retiring has to
     # take it out of the plan, not just flag the row.
     def test_a_retired_drill_is_not_in_any_session(self, seeded):
@@ -669,6 +707,20 @@ class TestSlugSets:
         unknown = COMBINATIONS - DRILL_SLUGS
         assert not unknown, (
             f"COMBINATIONS names slugs that are not in DRILLS: {unknown}"
+        )
+
+    # The three tests above catch a slug that is spelled wrong. This catches a
+    # slug that is spelled right and does nothing: COMBINATIONS grew to twelve
+    # when the single-move openers retired, and an entry that never reaches a
+    # warm-up slot is invisible to every other test here. The other direction -
+    # a warm-up missing from the set - is already caught by
+    # test_every_warm_up_is_combination_work, which reads the drill actually
+    # used rather than the set.
+    def test_combinations_is_exactly_the_warm_up_slots(self, seeded):
+        warm_ups = {drills[0].slug for _name, _day, drills in sessions(seeded)}
+        assert COMBINATIONS == warm_ups, (
+            f"in COMBINATIONS but never a warm-up: {sorted(COMBINATIONS - warm_ups)}; "
+            f"a warm-up but not in COMBINATIONS: {sorted(warm_ups - COMBINATIONS)}"
         )
 
     # Catches a typo in JUGGLING, which would leave a session with no juggling

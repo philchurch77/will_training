@@ -4,3 +4,4 @@
 - [Free text and round trips](free_text_fields.md) — which fields hold typed text and why the edit path is currently sound.
 - [The plan is read as it stands today](plan_has_no_history.md) — accepted consequence: changing the seeded plan re-scores past perfect weeks.
 - [Three tests fail on Sundays](sunday_test_flake.md) — a date-dependent fixture flake, not a regression. Check the weekday before blaming a diff.
+- [How retirement works](retirement_mechanism.md) — one `is_active` flag, already covered by tests; the only thing left to audit per batch.

@@ -13,8 +13,10 @@ Coaching principles baked into this data, for a 9-year-old in academy football:
   the fun of it, and they are pure first touch.
 * Nothing lasts longer than five minutes. Each session is a warm-up, four
   technical drills and a fun finisher, and lands on exactly 30 minutes.
-* The warm-up is mostly combination work - moves strung together rather than
+* The warm-up is always combination work - moves strung together rather than
   one move repeated - so the first block of the session is real close control.
+  He is a confident dribbler, so the simplest opening is now a pair of moves
+  rather than a single one; the single-move openers have been retired.
 * One day off a week. Recovery is part of the plan, not a failure of it.
 * Instructions are written for Will to read himself.
 
@@ -138,8 +140,28 @@ DRILLS = [
     #    so "do a rollover, a scissor and a chop" is no use to him unless the
     #    drill says what those are.
     #
-    # Graded in two rungs of four: two moves on the spot at difficulty 2,
-    # three moves at difficulty 3.
+    # 4. Two moves that look alike are told apart out loud. A Cruyff turn and
+    #    the L-turn both cut behind the standing leg with the inside of the
+    #    foot; the Cruyff spins him away, the L-turn brings him out square.
+    #    That touch being shared is why the L-turn says "do not spin all the
+    #    way round", and why PLAN_DAYS keeps the two in different sessions.
+    #    A scissor circles the ball and pushes away with the *same* foot, a
+    #    step over pushes away with the *other* one, and the scissor drill
+    #    says so. There is only one chop in this library and it is the
+    #    existing one - cut back with the inside of the foot, in front of him.
+    #    A "Ronaldo chop" is not added under that name, because the behind-
+    #    the-leg inside cut is already here as the Cruyff turn.
+    #
+    # 5. A warm-up must be more touches than the drill it is built from.
+    #    is_combination is a hand-kept set and no test reads the text, so a
+    #    single move here passes everything while claiming to be a chain.
+    #    double-scissor-push is two circles and an exit because one circle
+    #    and an exit is already the `scissors` drill in Dribbling.
+    #
+    # Everything added to this block is difficulty 3, pairs included. The one
+    # drill still graded 2 is rollover-chop, kept deliberately as the gentlest
+    # opening in the fortnight; it is the exception, not the rule a new drill
+    # follows. Nothing here is a single move any more - see RETIRED.
     (
         "rollover-chop",
         "Rollover into a chop",
@@ -169,7 +191,7 @@ DRILLS = [
         "with the outside of the foot you rolled with. Walk it through slowly "
         "both ways first.",
         "Roll, step over, gone",
-        5, None, "b s", 2, False, False,
+        5, None, "b s", 3, False, False,
     ),
     (
         "croqueta-chop",
@@ -180,7 +202,7 @@ DRILLS = [
         "it came with the inside of that foot. Walk it through slowly ten times "
         "each way first.",
         "Sharp jab, then cut it back",
-        5, None, "b", 2, True, False,
+        5, None, "b", 3, True, False,
     ),
     (
         "rollover-fake-chop",
@@ -225,6 +247,73 @@ DRILLS = [
         "on the list.",
         "Weak foot only",
         5, None, "b", 3, True, False,
+    ),
+    (
+        "step-over-cruyff",
+        "Step over into a Cruyff",
+        "ball-mastery",
+        "Step your right foot over the top of the ball without touching it. "
+        "Then drag the ball behind your standing leg with the inside of that "
+        "same foot and spin away. Walk it through slowly, then ten leading "
+        "with each foot.",
+        "Sell the step over, then spin",
+        5, None, "b s", 3, False, False,
+    ),
+    (
+        "double-scissor-push",
+        "Double scissor into a push",
+        "ball-mastery",
+        "Circle your foot around the front of the ball from the inside to the "
+        "outside without touching it, then do the same with your other foot. "
+        "Now push the ball away with the outside of whichever foot is nearer. "
+        "Walk it through slowly first, then a whole set starting with each "
+        "foot.",
+        "Two circles, then go",
+        5, None, "b s", 3, True, False,
+    ),
+    (
+        "drag-back-l-turn",
+        "Drag back into an L-turn",
+        "ball-mastery",
+        "Roll the ball backwards with the sole of your foot, then cut it "
+        "across behind your standing leg with the inside of that same foot. "
+        "Do not spin all the way round - you want to come out facing square, "
+        "going the way you just cut. Walk it through slowly, then a whole set "
+        "with each foot.",
+        "Square, not all the way round",
+        5, None, "b s", 3, True, False,
+    ),
+    (
+        "step-over-roulette",
+        "Step over into a roulette",
+        "ball-mastery",
+        "Step your right foot over the top of the ball without touching it. "
+        "Then stop the ball with your right sole, spin your body all the way "
+        "round, and drag it on with your left sole as you come out. Walk it "
+        "through very slowly, then a whole set turning each way.",
+        "Spin all the way round it",
+        5, None, "b s", 3, True, False,
+    ),
+    (
+        "feint-cruyff",
+        "Body feint into a Cruyff",
+        "ball-mastery",
+        "Drop your shoulder and lean like you are going round the outside, "
+        "then shape as if you are about to pass. Instead, drag the ball behind "
+        "your standing leg with the inside of your foot and spin away. Walk "
+        "it through slowly, then a whole set spinning each way.",
+        "Sell the shoulder, then spin",
+        5, None, "b s", 3, True, False,
+    ),
+    (
+        "croqueta-burst",
+        "Croqueta and burst",
+        "ball-mastery",
+        "Push the ball sharply from the inside of one foot to the inside of "
+        "the other. That first push is a jab, not a roll. Walk it through "
+        "slowly, then add three quick steps forward as soon as it is across.",
+        "Jab it across, then go",
+        5, None, "b s", 3, False, False,
     ),
     (
         "freestyle-five",
@@ -455,6 +544,28 @@ DRILLS = [
         "Sharp cut, then accelerate",
         5, None, "b c s", 2, True, False,
     ),
+    (
+        "scissors",
+        "Scissors",
+        "dribbling",
+        "Circle your foot around the front of the ball from the inside to the "
+        "outside without touching it, then push the ball away with the outside "
+        "of that same foot. A step over is different - you push away with the "
+        "other foot. Do a whole set with each foot.",
+        "Same foot circles, same foot pushes",
+        5, None, "b c s", 3, True, False,
+    ),
+    (
+        "elastico",
+        "Elastico",
+        "dribbling",
+        "Push the ball out to the side with the outside of your foot, then "
+        "snap it straight back inside with the same foot in one motion. The "
+        "second touch has to come before the ball has really left you, so go "
+        "slowly until the two join up. Do a whole set with each foot.",
+        "Out and back, one motion",
+        5, None, "b c s", 3, True, False,
+    ),
     # --- Passing ---------------------------------------------------------
     (
         "wall-pass-one-touch",
@@ -675,7 +786,7 @@ DRILLS = [
 
 # Juggling and keepy-ups. Every session carries exactly one, so it needs to be
 # a flag the plan and the tests can see - the same job weak_foot does. Kept as
-# a set of slugs rather than a thirteenth column on fifty tuples.
+# a set of slugs rather than a thirteenth column on every tuple.
 JUGGLING = {
     "juggling-laces",
     "thigh-juggles",
@@ -690,15 +801,21 @@ JUGGLING = {
 
 # Combination work: a sequence of moves joined together, not one move on
 # repeat. Same shape as JUGGLING above, and for the same reason - the plan and
-# the tests both need to see it. Eight of the twelve warm-up slots carry one.
+# the tests both need to see it. All twelve warm-up slots carry one: the four
+# single-move openers were retired once he had outgrown them, and the test
+# asserts twelve rather than eight so they cannot quietly creep back.
 COMBINATIONS = {
     "rollover-chop",
-    "drag-push-out",
+    "step-over-cruyff",
+    "double-scissor-push",
+    "drag-back-l-turn",
+    "step-over-roulette",
+    "feint-cruyff",
+    "croqueta-burst",
     "sole-roll-scissor",
     "rollover-fake-chop",
     "tap-drag-turn",
     "croqueta-chop",
-    "combo-and-burst",
     "weak-foot-combo",
 }
 
@@ -715,6 +832,15 @@ COMBINATIONS = {
 RETIRED = {
     "figure-eight-legs",   # a single move, and the one he had outgrown
     "weak-foot-taps",      # replaced by weak-foot-combo
+    # He is a confident dribbler now, and a single move on repeat is no
+    # longer a warm-up for him - it is five minutes of autopilot. All twelve
+    # openings chain moves together instead; the simplest is a pair.
+    "toe-taps",            # single move; the components live on in the chains
+    "sole-rolls",          # single move; the sole roll opens sole-roll-scissor
+    "foundations",         # single move; the same touch is the croqueta jab
+    "rollovers",           # single move; the rollover opens rollover-chop
+    "drag-push-out",       # superseded by drag-back-l-turn, the same L harder
+    "combo-and-burst",     # superseded by croqueta-burst, same finish harder
 }
 
 # PRESEASON SHAPE: six sessions of exactly 30 minutes, and Sunday off. There is
@@ -733,11 +859,14 @@ RETIRED = {
 # drills count as five minutes too, so the sum lands on 30 either way and
 # rebalancing a day means swapping a drill, not doing arithmetic.
 #
-# The warm-up slot is mostly combination work - rollover, fake, chop joined
+# The warm-up slot is always combination work - rollover, fake, chop joined
 # into one flow - because a single move on repeat is autopilot by nine on an
 # elite squad, and the first block is where close control is actually built.
-# Eight of the twelve are combinations; four stay single moves, because the
-# moves a combination is made of are still worth five minutes of their own.
+# All twelve are combinations. Four of them used to be single moves, kept on
+# the argument that the parts of a combination are worth five minutes of their
+# own; he is a confident dribbler now and that argument has run out. The parts
+# survive inside the pairs - the rollover opens rollover-chop, the foundation
+# touch is the croqueta jab - so nothing is actually lost.
 # Twelve slots, twelve different drills: the warm-up is the one thing he meets
 # every single day, so it is the one that goes stale first.
 #
@@ -753,8 +882,8 @@ RETIRED = {
 PLAN_NAME = "Will's Week"
 
 # Each day carries two running orders and alternates between them, so Monday is
-# not the same six drills for six months. The fortnight uses all 50 drills in
-# the library; on its own, one week could only ever reach 36 of them.
+# not the same six drills for six months. The fortnight uses every active
+# drill; on its own, one week could only ever reach 36 of them.
 #
 # Both weeks of a given day keep the same shape - the same label, the same
 # balance, speed on the same three days - so the balance of the fortnight is
@@ -779,42 +908,42 @@ PLAN_NAME = "Will's Week"
 #  [week A drills], [week B drills])
 PLAN_DAYS = [
     (0, "Ball mastery + first touch", 30, False, False, [
-        "foundations", "wall-control-inside", "weak-foot-control",
+        "double-scissor-push", "wall-control-inside", "weak-foot-control",
         "cushion-touch", "drag-backs", "keepy-up-record",
     ], [
-        "toe-taps", "thigh-control", "first-touch-turn",
+        "step-over-cruyff", "thigh-control", "first-touch-turn",
         "bouncing-control", "laces-technique", "weak-foot-juggles",
     ]),
     (1, "Dribbling + speed", 30, False, False, [
         "rollover-chop", "cone-slalom", "step-over", "speed-dribble-gate",
         "cruyff-past-cone", "around-the-world",
     ], [
-        "drag-push-out", "cruyff-turn", "drag-backs", "turn-and-sprint",
+        "step-over-roulette", "cruyff-turn", "drag-backs", "turn-and-sprint",
         "change-of-pace", "keepy-up-record",
     ]),
     (2, "Passing + shooting", 30, False, False, [
         "rollover-fake-chop", "weak-foot-wall-pass", "wall-pass-one-touch",
         "laces-technique", "corner-placement", "juggle-and-volley",
     ], [
-        "sole-rolls", "target-passing", "driven-pass", "weak-foot-finish",
+        "drag-back-l-turn", "target-passing", "driven-pass", "weak-foot-finish",
         "low-driven-shot", "juggling-laces",
     ]),
     (3, "First touch + speed", 30, False, False, [
-        "rollovers", "first-touch-turn", "first-touch-and-go",
+        "feint-cruyff", "first-touch-turn", "first-touch-and-go",
         "control-and-move", "weak-foot-finish", "juggling-laces",
     ], [
         "sole-roll-scissor", "step-over-past-cone", "sprint-to-the-ball",
         "juggle-and-catch", "inside-outside-cuts", "freestyle-five",
     ]),
     (4, "Dribbling + passing", 30, False, False, [
-        "tap-drag-turn", "inside-outside-cuts", "figure-eight-dribble",
+        "tap-drag-turn", "inside-outside-cuts", "elastico",
         "driven-pass", "target-passing", "thigh-juggles",
     ], [
-        "weak-foot-combo", "cone-slalom", "figure-eight-dribble",
+        "weak-foot-combo", "scissors", "figure-eight-dribble",
         "two-touch-wall-pass", "low-juggles", "wall-target-challenge",
     ]),
     (5, "Shooting + speed", 30, False, False, [
-        "combo-and-burst", "turn-and-shoot", "low-driven-shot",
+        "croqueta-burst", "turn-and-shoot", "low-driven-shot",
         "alternate-foot-juggles", "drag-back-escape", "beat-the-clock",
     ], [
         "croqueta-chop", "corner-placement", "turn-and-shoot", "standing-start",

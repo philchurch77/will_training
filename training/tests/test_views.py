@@ -1,5 +1,7 @@
 """Screens, PIN login and access to the coach area."""
 
+from datetime import timedelta
+
 import pytest
 from django.conf import settings
 from django.contrib.staticfiles import finders
@@ -616,3 +618,106 @@ class TestChrome:
         body = client.get(reverse("training:coach_plan")).content.decode()
         header = body.split("</header>")[0]
         assert reverse("training:coach_plan") not in header
+
+
+class TestARetiredDrillIsStillReachable:
+    """Retiring a drill sets is_active=False. Neither `drill_complete` nor
+    `drill_detail` filters on it, deliberately.
+
+    The scenario is real: he trains on the morning of a deploy with no signal,
+    the tick sits in localStorage, the deploy retires the drill, signal
+    returns and the queue replays against a slug that is no longer active.
+    A later tidy adding `.active()` to either view would throw that tick away
+    with a 404 that nothing in the app surfaces.
+    """
+
+    # Catches an is_active filter being added to drill_complete, which would
+    # 404 a tick queued offline before the deploy that retired the drill.
+    def test_a_tick_queued_offline_lands_against_a_drill_retired_by_the_deploy(
+        self, client, will, plan, drill
+    ):
+        from training.models import Drill, SessionLog
+
+        # Yesterday, not a pinned date: the queue's date is only honoured
+        # within the last fortnight (see _parse_date), which is the window a
+        # phone can realistically have been offline for.
+        yesterday = timezone.localdate() - timedelta(days=1)
+
+        # He trained yesterday with no signal. The deploy then retires it.
+        Drill.objects.filter(pk=drill.pk).update(is_active=False)
+
+        client.force_login(will)
+        response = client.post(
+            reverse("training:drill_complete", args=[drill.slug]),
+            {"date": yesterday.isoformat(), "session_seconds": "1800"},
+        )
+        assert response.status_code == 302, (
+            "the replayed tick was rejected - has drill_complete started "
+            "filtering on is_active?"
+        )
+
+        log = SessionLog.objects.get(athlete=will, date=yesterday, drill=drill)
+        assert log.completed is True
+
+    # Catches the unique constraint on (athlete, date, drill) being relaxed -
+    # the offline queue replays a tick that may already have landed, and a
+    # second row would double the day.
+    def test_replaying_the_same_queued_tick_twice_leaves_one_row(
+        self, client, will, plan, drill
+    ):
+        from training.models import Drill, SessionLog
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+
+        Drill.objects.filter(pk=drill.pk).update(is_active=False)
+        client.force_login(will)
+
+        body = {"date": yesterday.isoformat(), "session_seconds": "1800"}
+        client.post(reverse("training:drill_complete", args=[drill.slug]), body)
+        client.post(reverse("training:drill_complete", args=[drill.slug]), body)
+
+        assert (
+            SessionLog.objects.filter(
+                athlete=will, date=yesterday, drill=drill
+            ).count()
+            == 1
+        )
+
+    # Catches a replayed tick blanking the count he entered on the drill page
+    # before he lost signal. drill_complete writes only what the request
+    # carried, and the row it lands on may belong to a retired drill.
+    def test_a_replayed_tick_does_not_wipe_a_count_on_a_retired_drill(
+        self, client, will, plan, rep_drill
+    ):
+        from training.models import Drill, SessionLog
+
+        yesterday = timezone.localdate() - timedelta(days=1)
+
+        SessionLog.objects.create(
+            athlete=will, date=yesterday, drill=rep_drill,
+            completed=True, actual_reps=42,
+        )
+        Drill.objects.filter(pk=rep_drill.pk).update(is_active=False)
+
+        client.force_login(will)
+        client.post(
+            reverse("training:drill_complete", args=[rep_drill.slug]),
+            {"date": yesterday.isoformat(), "session_seconds": "1800"},
+        )
+
+        log = SessionLog.objects.get(athlete=will, date=yesterday, drill=rep_drill)
+        assert log.actual_reps == 42
+
+    # Catches an is_active filter on drill_detail, which would 404 a bookmark
+    # or a precached page - on a phone with no signal, with no way back.
+    def test_a_retired_drills_page_still_renders(self, client, will, drill):
+        from training.models import Drill
+
+        Drill.objects.filter(pk=drill.pk).update(is_active=False)
+
+        client.force_login(will)
+        response = client.get(reverse("training:drill", args=[drill.slug]))
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert "Tap the ball." in body
+        assert drill.cue in body

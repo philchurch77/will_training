@@ -32,3 +32,7 @@ Read-only commands that are safe to run here: `showmigrations`, `sqlmigrate`,
 `makemigrations --check --dry-run`. All three were clean at 0007.
 
 See [[cascades]] and [[deploy-data-safety]].
+
+Re-confirmed 2026-09-21: `showmigrations training` shows 0001-0007 all applied
+and 0007 still the head; `makemigrations --check --dry-run` returns
+"No changes detected". Nothing has been added since this note was written.

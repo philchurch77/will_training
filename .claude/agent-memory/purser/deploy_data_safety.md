@@ -1,6 +1,6 @@
 ---
 name: deploy-data-safety
-description: What runs automatically on Render for will_training, the unguarded seed_drills --reset, and the exact SQLite backup command
+description: What runs automatically on Render for will_training, the now-guarded seed_drills --reset, and the exact SQLite backup command
 metadata:
   type: project
 ---
@@ -14,15 +14,13 @@ in the repo for `reset|flush|loaddata|--fake|--noinput`.
 **So: every seeder edit is an unattended production data change, and every
 migration applies with nobody watching.**
 
-**The standing hazard: `seed_drills --reset` has no guard.**
-`handle()` does `PlanDrill / PlanDay / TrainingPlan / Drill / Skill
-.objects.all().delete()` with no confirmation prompt, no `--noinput` gate, and
-no refusal when `DEBUG` is False or when `WILL_DB_PATH` points at `/var/data`.
-Combined with the CASCADEs in [[cascades]], one `--reset` typed into a Render
-shell destroys his entire history, streak and badges. It is documented in
-CLAUDE.md as an ordinary developer command, so it is in muscle memory.
-Recommended fix, raised but not yet applied: refuse when `settings.DEBUG` is
-False unless an explicit `--i-know-what-this-does` flag is passed.
+**RESOLVED 2026-09-21: `seed_drills --reset` is now guarded.**
+`handle()` raises `CommandError` when `--reset` is passed and
+`settings.DEBUG` is False, before any delete runs (`seed_drills.py`, top of
+`handle`). `TestResetIsRefused` in `test_seed.py` covers the guard and
+`test_a_refused_reset_deletes_no_history` covers the rollback. The
+recommendation in the earlier version of this note was taken. Do not re-raise
+it as an open finding - verify the guard is still there and move on.
 
 **Backup before any migrate on Render.** Render disk snapshots exist but
 restoring is a support round trip, so take one first, from the Render shell:

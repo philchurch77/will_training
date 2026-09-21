@@ -36,3 +36,27 @@ count is unrecoverable. `coach_plan_day` action=remove deletes a PlanDrill —
 no history, fine.
 
 See [[deploy-data-safety]].
+
+**Authoritative reverse-relation map** (from Django's own
+`model._meta.related_objects`, run 2026-09-21 - beats grepping for FKs):
+
+    Skill        -> Drill.skill [CASCADE]
+    Drill        -> PlanDrill.drill [CASCADE], SessionLog.drill [CASCADE]
+    TrainingPlan -> PlanDay.plan [CASCADE]
+    PlanDay      -> PlanDrill.plan_day [CASCADE]
+    PlanDrill    -> NOTHING
+    SessionLog   -> NOTHING
+    SessionClock -> NOTHING
+    Badge        -> EarnedBadge.badge [CASCADE]
+    EarnedBadge  -> NOTHING
+
+**PlanDrill has no dependents.** So `_seed_plan`'s `day.items.all().delete()`
+is a leaf delete and can never reach a SessionLog, however many plan slots a
+change rewrites. Settled - do not re-raise it every time PLAN_DAYS moves.
+
+**Admin delete permissions, re-checked 2026-09-21.** `NoDeleteMixin` is on
+`SkillAdmin` and `DrillAdmin` only. `SessionLogAdmin` (admin.py:73) and
+`BadgeAdmin` (admin.py:80) both still allow delete: the first is his whole
+history behind a bulk action, the second revokes every EarnedBadge by CASCADE.
+Both pre-date any current work. Raised repeatedly; if the developer states a
+decision, record it here and stop re-raising.

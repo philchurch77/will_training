@@ -431,3 +431,91 @@ class TestPerfectWeeks:
         for day in (THURSDAY, FRIDAY):
             tick(will, drill, day)
         assert badge in progress.award_badges(will, SUNDAY)
+
+
+class TestRetiringADrillDoesNotMoveHisHistory:
+    """Retirement flips is_active=False and deletes nothing. Every number on
+    the Progress screen must read exactly the same the day after a deploy as
+    it did the day before.
+
+    The failure this catches is a later change making a streak, a minutes
+    total or the skill chart filter on `Drill.objects.active()`. Nothing would
+    error and no row would be lost - his past would simply be smaller, which
+    is the version of losing his history that nobody notices.
+    """
+
+    def retire(self, *drills):
+        from training.models import Drill
+
+        Drill.objects.filter(pk__in=[d.pk for d in drills]).update(is_active=False)
+
+    # Catches a streak or a lifetime total starting to filter on is_active.
+    def test_the_streaks_and_the_total_minutes_are_identical_after_retirement(
+        self, will, plan, drill, rep_drill
+    ):
+        for day in (MONDAY, TUESDAY, WEDNESDAY, THURSDAY):
+            tick(will, drill, day)
+            tick(will, rep_drill, day)
+
+        before = (
+            progress.current_streak(will, THURSDAY),
+            progress.longest_streak(will),
+            progress.total_minutes(will),
+            progress.drills_completed(will),
+            progress.sessions_this_month(will, THURSDAY),
+        )
+        # Guard the guard: an all-zero "before" would pass whatever happened.
+        assert before == (4, 4, 40, 8, 4)
+
+        self.retire(drill, rep_drill)
+
+        after = (
+            progress.current_streak(will, THURSDAY),
+            progress.longest_streak(will),
+            progress.total_minutes(will),
+            progress.drills_completed(will),
+            progress.sessions_this_month(will, THURSDAY),
+        )
+        assert after == before
+
+    # Catches the skill chart, and the clock-shared minutes behind it, losing
+    # a day because the drill he did it on is no longer in the library.
+    def test_a_clocked_day_is_worth_the_same_after_the_drill_is_retired(
+        self, will, plan, drill, rep_drill
+    ):
+        from training.models import SessionClock
+
+        tick(will, drill, MONDAY)
+        tick(will, rep_drill, MONDAY)
+        SessionClock.objects.create(athlete=will, date=MONDAY, seconds=45 * 60)
+
+        before = [(row["skill"].slug, row["minutes"]) for row in
+                  progress.minutes_by_skill(will)]
+        assert progress.total_minutes(will) == 45
+        assert sum(minutes for _slug, minutes in before) == 45
+
+        self.retire(drill, rep_drill)
+
+        after = [(row["skill"].slug, row["minutes"]) for row in
+                 progress.minutes_by_skill(will)]
+        assert after == before
+        assert progress.total_minutes(will) == 45
+
+    # Catches completed_dates or day_state starting to filter on is_active,
+    # which would turn a day he trained into a missed day - and break a streak
+    # he has already earned.
+    def test_a_day_he_trained_is_still_a_day_he_trained(
+        self, will, plan, drill
+    ):
+        tick(will, drill, MONDAY)
+        tick(will, drill, TUESDAY)
+
+        before = progress.completed_dates(will)
+        assert before == {MONDAY, TUESDAY}
+
+        self.retire(drill)
+
+        assert progress.completed_dates(will) == before
+        done = progress.completed_dates(will)
+        assert progress.day_state(MONDAY, done) == progress.DONE
+        assert progress.day_state(TUESDAY, done) == progress.DONE
