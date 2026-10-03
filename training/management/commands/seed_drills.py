@@ -31,8 +31,10 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from training.deck_data import seed_deck
 from training.models import (
     Badge,
+    Card,
     Drill,
     PlanDay,
     PlanDrill,
@@ -1023,13 +1025,17 @@ class Command(BaseCommand):
         self._seed_badges()
         self._seed_plan()
         self._seed_profiles()
+        # The challenge cards. Never touched by --reset: Play.card is PROTECT
+        # and the deck has no plan to rebuild, so there is nothing to clear.
+        seed_deck()
 
         self.stdout.write(
             self.style.SUCCESS(
                 f"Ready: {Skill.objects.count()} skills, "
                 f"{Drill.objects.count()} drills, "
                 f"{Badge.objects.count()} badges, "
-                f"plan '{PLAN_NAME}' with {PlanDay.objects.count()} days."
+                f"plan '{PLAN_NAME}' with {PlanDay.objects.count()} days, "
+                f"{Card.objects.active().count()} cards in the deck."
             )
         )
 

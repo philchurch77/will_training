@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import deck_views, views
 
 app_name = "training"
 
@@ -17,6 +17,9 @@ urlpatterns = [
     path("drill/<slug:slug>/undo/", views.drill_uncomplete, name="drill_uncomplete"),
     path("session/time/", views.session_time, name="session_time"),
     path("offline/", views.offline, name="offline"),
+    # The deck. One page that draws itself on the phone, and what feeds it.
+    path("deck/", deck_views.deck, name="deck"),
+    path("api/plays/", deck_views.api_plays, name="api_plays"),
     # Coach (staff only)
     path("coach/", views.coach_plan, name="coach_plan"),
     path("coach/day/<int:weekday>/", views.coach_plan_day, name="coach_plan_day"),

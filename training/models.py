@@ -415,3 +415,130 @@ class EarnedBadge(models.Model):
 
     def __str__(self):
         return f"{self.badge} ({self.earned_on})"
+
+
+# --- The deck -------------------------------------------------------------
+#
+# The deck replaces the fixed weekly plan with challenge cards he picks from.
+# It is built alongside the plan rather than on top of it: nothing below
+# touches a Drill, a SessionLog or a badge, so the old screens keep working
+# until the switch-over, and his history is never at risk from this code.
+# See docs/chart/deck.md for the legs and CONTEXT.md for the words.
+
+
+class CardQuerySet(models.QuerySet):
+    def active(self):
+        return self.filter(is_active=True)
+
+
+class Card(models.Model):
+    """One challenge with a score, e.g. toe taps in 30 seconds.
+
+    Cards are retired, never deleted, for the same reason drills are: a Play
+    points at its card, and his scores are what the record is made of. The
+    FK on Play is PROTECT, so a delete fails loudly instead of cascading.
+    """
+
+    QUICK_FEET = "quick-feet"
+    COMBOS = "combos"
+    MOVES = "moves"
+    REBOUNDER = "rebounder"
+    DRIBBLING = "dribbling"
+    FINISHING = "finishing"
+    KEEPY_UPS = "keepy-ups"
+    FREE_PLAY = "free-play"
+    PACK_CHOICES = [
+        (QUICK_FEET, "Quick feet"),
+        (COMBOS, "Combos"),
+        (MOVES, "Moves"),
+        (REBOUNDER, "Rebounder"),
+        (DRIBBLING, "Dribbling"),
+        (FINISHING, "Finishing"),
+        (KEEPY_UPS, "Keepy-ups"),
+        (FREE_PLAY, "Free play"),
+    ]
+
+    # How a score is read. COUNT: more is better. TIME: tenths of a second on
+    # the card's own stopwatch, less is better. NONE: free play, no score.
+    COUNT = "count"
+    TIME = "time"
+    NONE = "none"
+    SCORING_CHOICES = [(COUNT, "Count"), (TIME, "Time"), (NONE, "No score")]
+
+    slug = models.SlugField(max_length=60, unique=True)
+    name = models.CharField(max_length=60)
+    pack = models.CharField(max_length=20, choices=PACK_CHOICES)
+    instructions = models.TextField(
+        help_text="Two or three short sentences, written for Will to read himself."
+    )
+    cue = models.CharField(
+        max_length=60, help_text="One cue about the result, not the body."
+    )
+
+    scoring = models.CharField(max_length=8, choices=SCORING_CHOICES, default=COUNT)
+    score_label = models.CharField(
+        max_length=60, blank=True, help_text="What the number means, e.g. 'taps'."
+    )
+    per_foot = models.BooleanField(
+        default=False, help_text="Scored weak foot first, then strong foot."
+    )
+    out_of = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="The most he can score, if there is one."
+    )
+    timer_seconds = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Length of a 'how many in N seconds' go."
+    )
+
+    # Medal targets. For a TIME card they are tenths of a second and gold is
+    # the smallest; for a COUNT card gold is the largest.
+    bronze = models.PositiveIntegerField(null=True, blank=True)
+    silver = models.PositiveIntegerField(null=True, blank=True)
+    gold = models.PositiveIntegerField(null=True, blank=True)
+
+    # A move climbs three levels: on the spot, through the cones, past the
+    # cone at full pace. Blank for every card that is not a level of a move.
+    move = models.CharField(max_length=40, blank=True)
+    level = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    needs_cones = models.BooleanField(default=False)
+    needs_rebounder = models.BooleanField(default=False)
+    needs_goal = models.BooleanField(default=False)
+
+    order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    objects = CardQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Play(models.Model):
+    """One go at a card, with whatever he scored.
+
+    The id is made on his phone, not here, because the phone is where a play
+    happens: it is saved there first, with or without signal, and sent when
+    there is some. Sending the same play twice finds the id already taken and
+    changes nothing, which is what makes the sync safe to repeat.
+    """
+
+    id = models.UUIDField(primary_key=True, editable=False)
+    athlete = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="plays"
+    )
+    card = models.ForeignKey(Card, on_delete=models.PROTECT, related_name="plays")
+    date = models.DateField()
+    played_at = models.DateTimeField(help_text="When the phone says it happened.")
+    # For a per-foot card, score is the strong foot and weak_score the weak.
+    score = models.PositiveIntegerField(null=True, blank=True)
+    weak_score = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-played_at"]
+
+    def __str__(self):
+        return f"{self.date} {self.card}"
