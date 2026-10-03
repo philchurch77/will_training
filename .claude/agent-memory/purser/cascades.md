@@ -60,3 +60,17 @@ change rewrites. Settled - do not re-raise it every time PLAN_DAYS moves.
 history behind a bulk action, the second revokes every EarnedBadge by CASCADE.
 Both pre-date any current work. Raised repeatedly; if the developer states a
 decision, record it here and stop re-raising.
+
+**Deck tables (added by 0008, map re-run 2026-10-03):**
+
+    Card -> Play.card [PROTECT]
+    Play -> NOTHING
+    User -> LogEntry.user, SessionLog.athlete, SessionClock.athlete,
+            EarnedBadge.athlete [all CASCADE], Play.athlete [PROTECT]
+
+Nothing from Skill/Drill/Plan reaches Card or Play, so `seed_drills --reset`
+(which deletes Skill/Drill/Plan only, never users) cannot touch a play.
+Side effect worth knowing: once Will has one Play, deleting his user raises
+`ProtectedError` before anything is collected, which also shields his
+SessionLogs. `CardAdmin` and `PlayAdmin` carry `NoDeleteMixin`; `PlayAdmin`
+leaves `score`/`weak_score` editable (deliberate? not yet stated).

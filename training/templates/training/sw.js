@@ -9,20 +9,32 @@
 // Bump this whenever the CSS, JS or icon change - filenames are not
 // content-hashed, and static assets are served cache-first, so an old cache
 // would keep serving the previous stylesheet forever.
-const CACHE = 'will-training-v20';
+const CACHE = 'will-training-v21';
 
 // Built by the view as JSON. A {% templatetag openblock %} for {% templatetag closeblock %} loop with escapejs works too, but
 // escapejs writes every hyphen as a unicode escape, and a precache list you
 // cannot read by eye is a precache list nobody ever checks.
 const PRECACHE = {{ precache|safe }};
 
+// Only ever keep a clean 200 from this origin. A redirect to the login page
+// or a 500 stored here would be replayed offline as if it were the app, and
+// he would open his session to find a login screen he cannot get past.
+const keep = (res) => res.ok && !res.redirected && res.type === 'basic';
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE)
       // addAll fails the whole install if any single URL 404s, so add them
-      // one at a time and let stragglers be fetched on demand instead.
+      // one at a time and let stragglers be fetched on demand instead. Not
+      // cache.add either: it follows a redirect and keeps whatever is at the
+      // end of it, so a signed-out install would store the login page under
+      // /deck/. Only what passes keep() goes in.
       .then((cache) => Promise.all(
-        PRECACHE.map((url) => cache.add(url).catch(() => null))
+        // cache: 'reload' skips the browser's own HTTP cache, which could
+        // otherwise hand a new CACHE last deploy's deck.js.
+        PRECACHE.map((url) => fetch(url, { credentials: 'same-origin', cache: 'reload' })
+          .then((res) => (keep(res) ? cache.put(url, res) : null))
+          .catch(() => null))
       ))
       .then(() => self.skipWaiting())
   );
@@ -48,12 +60,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) { return; }
 
-  const isStatic = url.pathname.startsWith('/static/');
+  // The deck's plays go straight to the network, never to the cache. A cached
+  // copy of /api/plays/ would hand the phone an old list, and with no signal
+  // the page fallback below would answer it with the offline page as a 200.
+  // deck.js keeps its own copy and knows what a failed request means.
+  if (url.pathname.startsWith('/api/')) { return; }
 
-  // Only ever keep a clean 200 from this origin. A redirect to the login page
-  // or a 500 stored here would be replayed offline as if it were the app, and
-  // he would open his session to find a login screen he cannot get past.
-  const keep = (res) => res.ok && !res.redirected && res.type === 'basic';
+  const isStatic = url.pathname.startsWith('/static/');
 
   if (isStatic) {
     // Cache-first: these change only when CACHE above is bumped.

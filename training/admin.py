@@ -102,9 +102,20 @@ class CardAdmin(NoDeleteMixin, admin.ModelAdmin):
 
 @admin.register(Play)
 class PlayAdmin(NoDeleteMixin, admin.ModelAdmin):
-    """His scores. Read them here; nothing about a play is typed in."""
+    """His scores. Read them here; nothing about a play is typed in.
+
+    The scores are read-only too: the phone keeps its own copy and never
+    takes the server's over it, so a score corrected here would still show
+    the old number in his bests, and the two copies would quietly disagree.
+    """
 
     list_display = ("date", "card", "weak_score", "score", "athlete", "played_at")
     list_filter = ("card__pack", "date")
     date_hierarchy = "date"
-    readonly_fields = ("id", "athlete", "card", "date", "played_at", "created_at")
+    readonly_fields = (
+        "id", "athlete", "card", "date", "played_at", "score", "weak_score", "created_at",
+    )
+
+    def has_add_permission(self, request):
+        # A play is made on the phone, id and all; an empty add form only 500s.
+        return False

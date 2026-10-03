@@ -25,7 +25,8 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see below
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run pytest                    # 261 tests, ~3 min
+uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, before hand-over only
+uv run pytest                    # 357 tests, ~6 min
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -176,6 +177,56 @@ Function-based views on purpose: one maintainer, re-read in a year.
 - **Test fixtures use `test-` prefixed slugs** so they compose with the
   `seeded` fixture, which creates the real drills.
 
+## The deck (leg 1 of `docs/chart/deck.md`, not on his tab bar yet)
+
+The deck of scored challenge cards is replacing the fixed plan, in three legs;
+read the chart and `CONTEXT.md` before touching it. Until leg 3 it sits
+alongside the old app, reached from Coach -> "Cards (try it)", and nothing in
+it touches a `Drill`, a `SessionLog` or a badge.
+
+```
+training/deck_data.py    the 51 cards and seed_deck(); called by seed_drills
+training/deck_views.py   /deck/ (the shell) and /api/plays/ (the backup)
+static/training/js/deck.js   everything he sees and does on /deck/
+```
+
+- **The deck is drawn on the phone.** `/deck/` is a shell with every active
+  card baked in; `deck.js` deals, scores, and keeps every play in
+  localStorage (`will-deck-plays-v1`) before sending it to `/api/plays/`. A
+  play's id is made on the phone, so a resend changes nothing. No server
+  answer removes a play from the phone, and `savePlays` refuses a list that is
+  shorter or missing an id. The CSRF token is read from the `csrftoken`
+  cookie at send time, because a cached page's token goes stale at the next
+  sign-in. The service worker never touches `/api/`. The date is the phone's
+  local date, never UTC - `toISOString().slice(0, 10)` puts a play at 00:30 in
+  summer on yesterday.
+- **A card is retired, never deleted, and its meaning never changes.**
+  `Play.card` is `PROTECT`. New wording or medal targets are fine in place. A
+  change to `scoring`, `per_foot`, `timer_seconds` or `out_of` changes what
+  the plays against it mean, so it is a new slug with the old one put in
+  `RETIRED`. `api_plays` accepts plays on retired cards: the phone has no
+  other copy to send.
+- **The hand** is five cards from five packs: always one Moves card and one
+  Quick feet or Combos card. It is the same all day until he deals again.
+  Free play is a button, not a card in the hand.
+- **The stepper starts at 0**, never at his best: one tap would put a number
+  he did not reach on his record for good.
+- **The phone resends what the server has lost.** `restore()` marks unsent
+  any play the server's list no longer holds - a disk restored from backup,
+  say - so `sync()` sends it again instead of the status line claiming
+  "backed up". The flip side: deleting plays on the server does nothing on
+  its own while a phone still holds them.
+- **A weak-foot score is on the phone before the strong foot starts**
+  (`will-deck-draft-v1`), so a page thrown away mid-card resumes rather than
+  losing the go he just counted.
+- **`clear_trial_plays` is the only thing that deletes a play**, and exists
+  only so Phil's trial plays come off Will's record before the hand-over. It
+  needs `--through DATE`, and `--confirm` needs `--expect N` matching the dry
+  run. It goes in leg 3. Back the disk up first, and clear the site data on
+  every phone the deck was tried on, or the phone sends them back.
+- **Scores are read-only in the admin.** The phone's copy wins on the phone,
+  so an admin correction would leave his bests showing the old number.
+
 ## The seed data is the product
 
 `seed_drills.py` is the most important file. It holds 66 drills and the weekly
@@ -299,6 +350,14 @@ Built for a 9-year-old on a phone, outdoors:
   on Today, All drills and the drill page. The minutes stay in the data because
   the plan is balanced on them.
   Coach screens may use ordinary form controls.
+- **Timed cards are the one exception to "nothing counts down at him."**
+  Agreed by Phil, 3 Oct 2026. On a deck card with `timer_seconds` ("how many
+  in 30 seconds") he taps Start himself, a bar fills with no numbers, and it
+  buzzes and says "Stop!" at the end. The limit is the game and he chose to
+  start it, which is not what the rule was written against. No digits
+  counting down, anywhere - not in the text, not in `aria-valuenow` or
+  `aria-valuetext`. `TestDeckScript` reads `runTimedBar` in `deck.js` to
+  guard it. Time-scored cards use a stopwatch that counts up and he stops.
 - Palette is white, grey and blue. Contrast ratios were measured, not eyeballed:
   body text ≥5:1, accent `#1667c9` at 5.5:1 on white. Keep it that way — he
   reads this in bright sun.
@@ -325,7 +384,9 @@ Service workers only register over **HTTPS or on localhost**. On a plain-http
 LAN address the app works but caches nothing. On Render it is HTTPS, so offline
 works there.
 
-`session.js` and `drill.js` are both precached (see `_precache_urls`).
+`session.js`, `drill.js`, `deck.js` and `/deck/` are precached (see
+`_precache_urls`). Install-time precaching keeps only what passes `keep()`:
+`cache.add` follows a redirect and would store the login page under `/deck/`.
 
 Bump `CACHE` in `training/templates/training/sw.js` when static assets change —
 filenames are not content-hashed.

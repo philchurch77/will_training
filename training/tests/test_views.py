@@ -12,7 +12,7 @@ from training.models import Skill
 
 pytestmark = pytest.mark.django_db
 
-CHILD_URLS = ["training:today", "training:progress", "training:library"]
+CHILD_URLS = ["training:today", "training:progress", "training:library", "training:deck"]
 COACH_URLS = [
     "training:coach_plan",
     "training:coach_drills",
@@ -43,6 +43,17 @@ class TestPinLogin:
     def test_the_right_pin_gets_in(self, client, will):
         response = client.post(reverse("training:login"), {"pin": "1234"})
         assert response.status_code == 302
+        assert response["Location"] == reverse("training:today")
+
+    # The deck's "Sign in to back it up" brings him back to the cards.
+    def test_the_right_pin_goes_back_to_a_page_on_this_site(self, client, will):
+        response = client.post(reverse("training:login") + "?next=/deck/", {"pin": "1234"})
+        assert response["Location"] == "/deck/"
+
+    # Catches the pad becoming an open redirect.
+    @pytest.mark.parametrize("target", ["https://evil.example/", "//evil.example/"])
+    def test_the_right_pin_never_goes_off_site(self, client, will, target):
+        response = client.post(reverse("training:login") + "?next=" + target, {"pin": "1234"})
         assert response["Location"] == reverse("training:today")
 
     def test_the_wrong_pin_does_not(self, client, will):

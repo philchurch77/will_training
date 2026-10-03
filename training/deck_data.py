@@ -152,7 +152,7 @@ def _move_cards():
                 "name": f"{name}: beat the cone",
                 "pack": Card.MOVES,
                 "instructions": (
-                    "Put a cone ten big steps away. That is your defender. Run "
+                    "Put a cone ten big steps away: that is your defender. Run "
                     f"at it full pace, beat it with {inline} and sprint "
                     "past. Eight goes, swap feet every go, and count the clean "
                     "ones."

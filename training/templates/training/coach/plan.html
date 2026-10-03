@@ -41,6 +41,9 @@
   </div>
 {% endif %}
 
+{# The deck, for Dad to try before it goes on Will's tab bar. Outside the plan check: it needs no plan. #}
+<a class="btn btn-quiet mt" href="{% url 'training:deck' %}">Cards (try it)</a>
+
 <form method="post" action="{% url 'training:logout' %}" class="center mt">
   {% csrf_token %}
   <button type="submit" class="linkbtn">Sign out</button>

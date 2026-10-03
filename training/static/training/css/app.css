@@ -654,6 +654,86 @@ a.drill-row:active { transform: scale(.985); }
 }
 body.is-offline .offline-note { display: block; }
 
+/* --- the deck --------------------------------------------------------- */
+/* Drawn by deck.js. The rows, the stepper and the cue are the drill screens'
+   own; what is new is the timed bar and the stopwatch. */
+.deck-row .drill-meta { gap: 8px; }
+.deck-done { font-weight: 800; color: var(--accent); }
+/* On Today an empty circle is a button that ticks the drill. Here a row only
+   opens the card, so the circle shows only once it is done. */
+.deck-row:not(.is-done) .tick { display: none; }
+.deck-row:not(.is-done) { padding-left: 18px; }
+
+/* Back is navigation, so it reads as a link - with a 64px hit area. */
+.deck-back {
+  display: flex; align-items: center; min-height: var(--tap);
+  color: var(--accent); font-size: 17px; font-weight: 800; text-decoration: none;
+  margin-bottom: 4px;
+}
+.deck-warn {
+  background: var(--warn-bg); color: var(--warn-ink);
+  border: 1px solid #ecd9a8; border-radius: 12px;
+  font-weight: 800; font-size: 16px; text-align: center; padding: 12px;
+  margin-bottom: 12px;
+}
+.deck-warn[hidden] { display: none; }
+.deck .btn[disabled] { background: var(--surface-2); color: var(--ink-2); opacity: 1; cursor: default; }
+.deck-title { font-size: 28px; }
+.deck-foot { font-size: 24px; margin: 0 0 6px; }
+.deck-meta { margin: 0 0 12px; }
+.deck-best { font-weight: 700; color: var(--ink-2); margin: 0 0 14px; }
+.deck-stage { margin-top: 6px; }
+.deck-fives { margin-top: 4px; }
+.deck-fives .btn { font-size: 22px; }
+
+/* The timed bar: fills from the left, with no numbers anywhere on it. The
+   width comes from deck.js as a transform, so it moves smoothly on a slow
+   phone. When it is full, "Stop!" says so in words as well. */
+.deck-timer {
+  height: 28px; border-radius: 999px; overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line);
+  margin: 6px 0 4px;
+}
+.deck-timer-fill {
+  height: 100%; background: var(--accent);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform .1s linear;
+}
+.deck-shout {
+  min-height: 48px; margin: 6px 0;
+  font-size: 40px; font-weight: 800; text-align: center; color: var(--ink);
+}
+.deck-timer.is-done { border-color: var(--accent); }
+
+/* The stopwatch counts up, like the session clock, and he stops it. */
+.deck-watch {
+  color: var(--ink); margin-bottom: 14px;
+  font-size: clamp(48px, 16vw, 76px); white-space: nowrap;
+}
+/* A little room to spare at 320px, where the row is otherwise 2px from full. */
+.deck-stage .counter-sm { gap: 12px; }
+/* deck.js shows and hides its buttons with the hidden attribute, and .btn's
+   and .linkbtn's own display rules would otherwise beat it. */
+.deck-stage [hidden] { display: none; }
+
+.deck-result {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; border-top: 1px solid var(--line);
+}
+.deck-result-label { flex: 1 1 auto; font-weight: 700; color: var(--ink-2); }
+.deck-result-num { font-size: 36px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.deck-flag {
+  flex: 0 0 100%; font-weight: 800; color: #0f4e9c;
+}
+/* Beating his own score is the moment the whole deck is built for. */
+.deck-flag.is-best {
+  flex: 0 0 auto; font-size: 24px;
+  background: var(--accent-soft); border: 1px solid var(--accent-line);
+  border-radius: 999px; padding: 4px 14px;
+}
+.deck-gap { font-size: 19px; font-weight: 800; margin: 12px 0 0; }
+.deck-status { color: var(--ink-3); font-size: 14px; text-align: center; margin-top: 18px; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
