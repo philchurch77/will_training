@@ -2,10 +2,12 @@ from django.contrib import admin
 
 from .models import (
     Badge,
+    Card,
     Drill,
     EarnedBadge,
     PlanDay,
     PlanDrill,
+    Play,
     SessionLog,
     Skill,
     TrainingPlan,
@@ -87,3 +89,22 @@ class BadgeAdmin(admin.ModelAdmin):
 @admin.register(EarnedBadge)
 class EarnedBadgeAdmin(admin.ModelAdmin):
     list_display = ("badge", "athlete", "earned_on")
+
+
+@admin.register(Card)
+class CardAdmin(NoDeleteMixin, admin.ModelAdmin):
+    """Retire a card in deck_data.py rather than deleting it here."""
+
+    list_display = ("name", "pack", "scoring", "per_foot", "move", "level", "is_active")
+    list_filter = ("pack", "scoring", "per_foot", "is_active")
+    search_fields = ("name", "instructions", "cue")
+
+
+@admin.register(Play)
+class PlayAdmin(NoDeleteMixin, admin.ModelAdmin):
+    """His scores. Read them here; nothing about a play is typed in."""
+
+    list_display = ("date", "card", "weak_score", "score", "athlete", "played_at")
+    list_filter = ("card__pack", "date")
+    date_hierarchy = "date"
+    readonly_fields = ("id", "athlete", "card", "date", "played_at", "created_at")

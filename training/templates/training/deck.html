@@ -1,0 +1,24 @@
+{% extends "training/base.html" %}
+{% load static %}
+{% block title %}Cards{% endblock %}
+{% block heading %}Cards{% endblock %}
+
+{% block content %}
+{# Everything below is drawn by deck.js from what the phone holds, so the #}
+{# page looks the same with no signal. The server only fills in the cards. #}
+<div id="deck" class="deck"
+     data-plays-url="{% url 'training:api_plays' %}"
+     data-csrf="{{ csrf_token }}">
+  <div class="card">
+    <p class="muted" style="margin:0">Shuffling the deck...</p>
+  </div>
+</div>
+<noscript>
+  <div class="card"><p>The cards need JavaScript switched on.</p></div>
+</noscript>
+{{ cards|json_script:"deck-cards" }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'training/js/deck.js' %}" defer></script>
+{% endblock %}
