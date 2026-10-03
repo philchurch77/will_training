@@ -1,1 +1,2 @@
 - [Seed data review conventions](seed_data_review_notes.md) — how to check seed_drills.py/CLAUDE.md/test_seed.py together, and drift already flagged once.
+- [Deck review notes](deck_review_notes.md) — deck.js/deck_views.py layout, deliberate choices, findings flagged in leg 1.

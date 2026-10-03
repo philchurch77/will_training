@@ -1,0 +1,1 @@
+- [Enforcement and audit state](project_enforcement.md) — request.user ownership, deck API probe results, settings decisions, open findings as of 2026-10-03

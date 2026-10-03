@@ -46,6 +46,12 @@ def api_login_required(view):
     def wrapped(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return JsonResponse({"error": "signed out"}, status=401)
+        # The phone's copy of his plays is one list whoever is signed in. A
+        # staff session (the admin, on the same phone) would file plays under
+        # the coach and, worse, make restore() think every one of Will's had
+        # been lost. Plays are Will's; the coach account gets none of this.
+        if request.user.is_staff:
+            return JsonResponse({"error": "coach account"}, status=403)
         return view(request, *args, **kwargs)
 
     return wrapped
@@ -76,7 +82,7 @@ def api_plays(request):
     """
     if request.method == "GET":
         plays = Play.objects.filter(athlete=request.user).select_related("card")
-        return JsonResponse({"plays": [_play_json(play) for play in plays]})
+        return _no_store(JsonResponse({"plays": [_play_json(play) for play in plays]}))
 
     try:
         incoming = json.loads(request.body or b"{}").get("plays", [])
@@ -85,18 +91,25 @@ def api_plays(request):
     if not isinstance(incoming, list):
         return JsonResponse({"error": "plays must be a list"}, status=400)
 
+    # Every card, retired ones included: a play made on a card that has since
+    # been retired is still his, and the phone has no other copy to send.
     cards = {card.slug: card for card in Card.objects.all()}
+    parsed = [(raw, *_parse_play(raw, request.user, cards)) for raw in incoming[:MAX_BATCH]]
+    # One query for the whole batch, not one per play.
+    owners = dict(
+        Play.objects.filter(
+            pk__in=[play.pk for _, play, _ in parsed if play is not None]
+        ).values_list("pk", "athlete_id")
+    )
     saved, refused = [], []
-    for raw in incoming[:MAX_BATCH]:
-        play, reason = _parse_play(raw, request.user, cards)
+    for raw, play, reason in parsed:
         if play is None:
             refused.append({"id": _safe_id(raw), "reason": reason})
             continue
-        existing = Play.objects.filter(pk=play.pk).first()
-        if existing is not None:
+        if play.pk in owners:
             # Already here: a repeat of a sync whose answer never reached the
             # phone. Nothing changes - the first copy is his record.
-            if existing.athlete_id == request.user.pk:
+            if owners[play.pk] == request.user.pk:
                 saved.append(str(play.pk))
             else:
                 refused.append({"id": str(play.pk), "reason": "id in use"})
@@ -105,14 +118,27 @@ def api_plays(request):
             with transaction.atomic():
                 play.save(force_insert=True)
         except IntegrityError:
-            # Two syncs racing with the same play. The other one saved it.
-            pass
+            # Two syncs racing with the same play: the other one saved it.
+            # Only call it saved if a copy is really there and it is his:
+            # "saved" makes the phone stop sending it.
+            owner = Play.objects.filter(pk=play.pk).values_list("athlete_id", flat=True).first()
+            if owner != request.user.pk:
+                reason = "not saved" if owner is None else "id in use"
+                refused.append({"id": str(play.pk), "reason": reason})
+                continue
+        owners[play.pk] = request.user.pk
         saved.append(str(play.pk))
 
-    return JsonResponse({"saved": saved, "refused": refused})
+    return _no_store(JsonResponse({"saved": saved, "refused": refused}))
 
 
 # --- helpers --------------------------------------------------------------
+
+
+def _no_store(response):
+    """His plays change with every card he plays; no browser keeps a copy."""
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 def _card_json(card):
@@ -167,21 +193,37 @@ def _parse_play(raw, athlete, cards):
         play_id = uuid.UUID(str(raw.get("id")))
     except ValueError:
         return None, "bad id"
+    # Only the canonical spelling. The answer echoes str(play_id), and the
+    # phone matches it against its own id string to mark the play sent; an
+    # uppercase or brace-wrapped id would never match and resend forever.
+    if str(play_id) != raw.get("id"):
+        return None, "bad id"
 
     card = cards.get(raw.get("card"))
     if card is None:
         return None, "unknown card"
 
+    # The same window as the date, for the same reason. An extreme time like
+    # year 1 or 9999 with an offset overflows when it is converted, and an
+    # uncaught error here would 500 the whole batch, every sync, for good.
+    now = timezone.now()
     try:
         played_at = datetime.fromisoformat(str(raw.get("played_at")))
-    except ValueError:
+        if timezone.is_naive(played_at):
+            played_at = timezone.make_aware(played_at)
+        in_window = (
+            now - timedelta(days=OLDEST_PLAY_DAYS + 1)
+            <= played_at
+            <= now + timedelta(days=2)
+        )
+    except (ValueError, OverflowError):
         return None, "bad time"
-    if timezone.is_naive(played_at):
-        played_at = timezone.make_aware(played_at)
+    if not in_window:
+        return None, "bad time"
 
     try:
         day = datetime.fromisoformat(str(raw.get("date"))).date()
-    except ValueError:
+    except (ValueError, OverflowError):
         return None, "bad date"
     today = timezone.localdate()
     # A day of slack forwards: his phone and the server can sit either side

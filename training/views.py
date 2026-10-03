@@ -21,6 +21,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from . import progress, throttle
@@ -85,7 +86,7 @@ def login_view(request):
                 throttle.clear(request)
                 auth_login(request, user)
                 request.session.set_expiry(settings.SESSION_COOKIE_AGE)
-                return redirect("training:today")
+                return redirect(_safe_next(request) or "training:today")
 
             locked_for = throttle.record_failure(request)
             error = throttle.describe(locked_for) or "Wrong code. Try again."
@@ -99,6 +100,21 @@ def login_view(request):
             "locked_for": locked_for,
         },
     )
+
+
+def _safe_next(request):
+    """Where to go after the PIN, if the address asked for somewhere on this site.
+
+    The deck's "Sign in to back it up" sends him back to the cards rather than
+    Today. Anything off-site is ignored, so the pad can never be used to bounce
+    someone to another address.
+    """
+    target = request.GET.get("next", "")
+    if target and url_has_allowed_host_and_scheme(
+        target, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return target
+    return None
 
 
 def logout_view(request):
@@ -618,6 +634,10 @@ def _precache_urls():
         static("training/js/app.js"),
         static("training/js/drill.js"),
         static("training/js/session.js"),
+        # The deck draws itself from the page and the script, so these two
+        # are the whole of it offline.
+        reverse("training:deck"),
+        static("training/js/deck.js"),
         # The manifest and icons too: an installed app that is opened offline
         # still asks for these, and a miss shows the browser's default icon.
         reverse("manifest"),

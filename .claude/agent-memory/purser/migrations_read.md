@@ -36,3 +36,9 @@ See [[cascades]] and [[deploy-data-safety]].
 Re-confirmed 2026-09-21: `showmigrations training` shows 0001-0007 all applied
 and 0007 still the head; `makemigrations --check --dry-run` returns
 "No changes detected". Nothing has been added since this note was written.
+
+**0008_deck (read 2026-10-03)** — two `CreateModel`s, `Card` and `Play`, and
+nothing else. `sqlmigrate` is two `CREATE TABLE` + two `CREATE INDEX`: no
+table rebuild, no existing table touched. Additive, loses nothing. Committed
+in 4914d36 and already on `origin/main`, so treat it as possibly applied on
+Render: never edit it, add 0009 instead. `makemigrations --check` clean at 0008.
