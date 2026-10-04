@@ -803,6 +803,42 @@ a.deck-slot::after {
 .deck-slot-medal { font-size: 15px; font-weight: 800; }
 .deck-slot.has-medal .deck-slot-medal { font-size: 17px; }
 .deck-slot:not(.has-medal):not(.is-locked) .deck-slot-medal { font-weight: 600; color: var(--ink-3); }
+/* Leg 2b: the week, test week, badges. The weekly bar is the level bar's
+   twin - one colour, said in words. */
+.deck-week { margin: 12px 0 0; }
+.deck-week-row { display: flex; justify-content: space-between; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; }
+.deck-run { font-weight: 800; color: #0f4e9c; }
+.deck-test-row .drill-name { color: #0f4e9c; }
+/* Under the cards: destinations, not the day's job. */
+.deck-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 20px; margin-top: 12px; }
+.deck-note { color: var(--ink-3); font-size: 14px; margin: 0 0 4px; }
+.deck-flash { border-color: var(--accent-line); }
+.deck-flash .deck-levelup:first-child { margin-top: 0; }
+.deck-badge {
+  display: flex; align-items: center; gap: 14px;
+  min-height: var(--tap); padding: 12px 14px; margin-top: 10px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  color: var(--ink-2);
+}
+.deck-badge.is-earned {
+  background: var(--surface); border: 2px solid var(--accent);
+  box-shadow: var(--shadow); color: var(--ink);
+}
+.deck-badge-em { font-size: 32px; line-height: 1; flex: 0 0 auto; }
+/* Still in colour: something to chase, not something switched off. */
+.deck-badge:not(.is-earned) .deck-badge-em { opacity: .75; }
+.deck-badge-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.deck-badge-name { font-weight: 800; font-size: 17px; }
+.deck-badge-desc { font-size: 15px; }
+.deck-badge-state { font-size: 14px; font-weight: 800; }
+.deck-badge.is-earned .deck-badge-state { color: #0f4e9c; }
+/* A retired badge he keeps. A word, never only a colour. */
+.badge-legend {
+  display: inline-block; align-self: flex-start; margin-top: 2px; padding: 1px 8px;
+  font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  background: var(--ink); color: var(--surface); border-radius: 999px;
+}
+.deck-badge .badge-legend { font-size: 13px; }
 .deck-status { color: var(--ink-3); font-size: 14px; text-align: center; margin-top: 18px; }
 
 @media (prefers-reduced-motion: reduce) {

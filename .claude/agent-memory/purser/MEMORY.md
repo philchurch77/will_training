@@ -1,8 +1,8 @@
-- [Migrations read so far](migrations_read.md) — 0001-0009, one line each, and which ones rebuild a table on SQLite (0007 yes, 0008/0009 no).
+- [Migrations read so far](migrations_read.md) — 0001-0010, one line each; table rebuilds on SQLite: 0007 and 0010 (badge), not 0008/0009.
 - [Cascade map](cascades.md) — every `on_delete` in `training/models.py`, what each one would take with it, and which are accepted.
 - [Deploy data safety](deploy_data_safety.md) — what runs on Render, the DEBUG-guarded `--reset`, and the backup command for the SQLite disk.
 - [Free text and round trips](free_text_fields.md) — which fields hold typed text and why the edit path is currently sound.
 - [The plan is read as it stands today](plan_has_no_history.md) — accepted consequence: changing the seeded plan re-scores past perfect weeks.
 - [Three tests fail on Sundays](sunday_test_flake.md) — a date-dependent fixture flake, not a regression. Check the weekday before blaming a diff.
 - [How retirement works](retirement_mechanism.md) — one `is_active` flag, already covered by tests; the only thing left to audit per batch.
-- [Deck sync](deck_sync.md) — phone/server play + stamp sync; leg 1 items closed, leg 2a loss paths open (2026-10-03).
+- [Deck sync](deck_sync.md) — plays, stamps, deck badges; 2b reviewed 2026-10-04, open: no tests on badge loss guards.

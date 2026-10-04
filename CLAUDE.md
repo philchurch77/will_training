@@ -26,7 +26,7 @@ uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see b
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
 uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, before hand-over only
-uv run pytest                    # 397 tests, ~6 min
+uv run pytest                    # 451 tests, ~6 min (3 Today tests fail on Sundays)
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -177,7 +177,7 @@ Function-based views on purpose: one maintainer, re-read in a year.
 - **Test fixtures use `test-` prefixed slugs** so they compose with the
   `seeded` fixture, which creates the real drills.
 
-## The deck (leg 1 of `docs/chart/deck.md`, not on his tab bar yet)
+## The deck (legs 1-2b of `docs/chart/deck.md`, not on his tab bar yet)
 
 The deck of scored challenge cards is replacing the fixed plan, in three legs;
 read the chart and `CONTEXT.md` before touching it. Until leg 3 it sits
@@ -227,6 +227,27 @@ static/training/js/deck.js   everything he sees and does on /deck/
 - **Gold on a move level opens the next.** A locked card is never dealt and
   cannot be played; it shows "Locked" and what opens it. The Moves card in his
   hand is always the skill of the week at its highest open level.
+- **The deck's badges are awarded at sync, on the server, from his plays**
+  (leg 2b): `deck_rules.deck_badge_values` over every Play row, retired cards
+  included, and `award_deck_badges` when a POST saves a new play. They never
+  go through `progress.award_badges`, and the old Progress page never shows
+  them - `Badge.DECK_KINDS` keeps the two apart until leg 3. Gold medal and
+  Record breaker trust the phone's stamps; `_parse_stamp` holds the checks
+  that stay true whatever the targets become. Already earned stays earned.
+- **A deck session is 3 different cards on one day, free play included; a
+  goal week is 3 sessions Mon-Sun.** This is the one rule written twice -
+  `deck_rules.session_dates` and `weekStatus` in `deck.js`. Change both. The
+  current week never breaks a run; weeks in a row is shown only from 1.
+- **A badge is retired, never deleted.** `EarnedBadge.badge` is CASCADE, so
+  both badge admins refuse delete. `RETIRED_BADGES` in `seed_drills.py` is an
+  explicit list (empty until leg 3); a retired badge is never awarded again,
+  and one he earned shows tagged Legend. `clear_trial_plays` is the only
+  thing that removes an award: it deletes every active deck badge (Legends
+  are kept) and re-awards from
+  the plays left.
+- **`will-deck-server-v1`** caches what only the server knows - earned deck
+  badges (only ever added), the goal-week run to last week, and badges not
+  yet celebrated. It is not the plays list, and nothing in it is a record.
 - **The hand** is five cards from five packs: always one Moves card and one
   Quick feet or Combos card. It is the same all day until he deals again.
   Free play is a button, not a card in the hand.

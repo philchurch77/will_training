@@ -373,6 +373,16 @@ class Badge(models.Model):
     WEAK_FOOT = "weak_foot"
     JUGGLING = "juggling"
     PERFECT_WEEKS = "perfect_weeks"
+    # The deck's badges (leg 2b). Worked out on the server from Play rows by
+    # deck_rules.deck_badge_values and awarded at sync - never by
+    # progress.award_badges, and never shown on the old Progress page.
+    GOAL_WEEKS_RUN = "goal_weeks_run"
+    GOAL_WEEKS_TOTAL = "goal_weeks_total"
+    MOVE_GOLDS = "move_golds"
+    PERSONAL_BESTS = "personal_bests"
+    TEST_WEEKS = "test_weeks"
+    WEAK_FOOT_CLOSER = "weak_foot_closer"
+    FREE_PLAYS = "free_plays"
     KIND_CHOICES = [
         (STREAK, "Day streak"),
         (TOTAL_DRILLS, "Drills completed"),
@@ -381,7 +391,18 @@ class Badge(models.Model):
         (WEAK_FOOT, "Weak foot drills"),
         (JUGGLING, "Juggling drills"),
         (PERFECT_WEEKS, "Perfect weeks"),
+        (GOAL_WEEKS_RUN, "Goal weeks in a row"),
+        (GOAL_WEEKS_TOTAL, "Goal weeks in total"),
+        (MOVE_GOLDS, "Move golds"),
+        (PERSONAL_BESTS, "Personal bests"),
+        (TEST_WEEKS, "Test weeks done"),
+        (WEAK_FOOT_CLOSER, "Weak foot closer"),
+        (FREE_PLAYS, "Free play"),
     ]
+    DECK_KINDS = frozenset({
+        GOAL_WEEKS_RUN, GOAL_WEEKS_TOTAL, MOVE_GOLDS, PERSONAL_BESTS,
+        TEST_WEEKS, WEAK_FOOT_CLOSER, FREE_PLAYS,
+    })
 
     code = models.SlugField(max_length=40, unique=True)
     name = models.CharField(max_length=40)
@@ -390,6 +411,11 @@ class Badge(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     threshold = models.PositiveIntegerField()
     order = models.PositiveSmallIntegerField(default=0)
+    # A badge is retired, never deleted: EarnedBadge.badge is CASCADE, so a
+    # delete takes his award with it. A retired badge is never awarded again,
+    # and one he already earned stays on his record tagged Legend. Set from
+    # RETIRED_BADGES in seed_drills.py.
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["order", "threshold"]

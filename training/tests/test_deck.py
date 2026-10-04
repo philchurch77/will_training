@@ -10,6 +10,7 @@ against it.
 import re
 import uuid
 from datetime import timedelta
+from io import StringIO
 
 import pytest
 from django.contrib.admin.sites import site
@@ -22,7 +23,8 @@ from django.utils import timezone
 
 from training import deck_data
 from training.deck_data import CARDS, seed_deck
-from training.models import Card, Play
+from training.deck_rules import award_deck_badges
+from training.models import Badge, Card, EarnedBadge, Play
 
 
 @pytest.fixture
@@ -371,6 +373,72 @@ class TestClearTrialPlays:
         )
         assert not Play.objects.filter(pk__in=[p.pk for p in trial]).exists()
         assert set(Play.objects.values_list("pk", flat=True)) == {p.pk for p in later}
+
+
+@pytest.mark.django_db
+class TestClearTrialPlaysBadges:
+    """The deck's badges go with the trial plays and are awarded again from
+    the plays left. Nothing else of his is touched."""
+
+    @pytest.fixture
+    def record(self, deck, will):
+        today = timezone.localdate()
+
+        def badge(code, kind, is_active=True):
+            return Badge.objects.create(
+                code=code, name=code, description="", emoji="*",
+                kind=kind, threshold=1, is_active=is_active,
+            )
+
+        old_app = badge("test-old-app", Badge.TOTAL_DRILLS)
+        legend = badge("test-legend", Badge.FREE_PLAYS, is_active=False)
+        badge("test-free", Badge.FREE_PLAYS)       # earned only by a trial play
+        badge("test-bests", Badge.PERSONAL_BESTS)  # earned by a later play too
+        make_play(will, "free-play", day=today - timedelta(days=10), score=None)
+        later = make_play(will, day=today - timedelta(days=2))
+        Play.objects.filter(pk=later.pk).update(bests=1)
+        EarnedBadge.objects.create(athlete=will, badge=old_app, earned_on=today)
+        EarnedBadge.objects.create(athlete=will, badge=legend, earned_on=today)
+        assert {b.code for b in award_deck_badges(will, today)} == {"test-free", "test-bests"}
+        return today - timedelta(days=5)
+
+    def codes(self):
+        return set(EarnedBadge.objects.values_list("badge__code", flat=True))
+
+    # Catches the clear deleting the old app's badges or a Legend (which
+    # could never be awarded again), keeping a badge only the trial earned,
+    # or not awarding back one his own later plays still earn.
+    def test_confirm_clears_trial_badges_and_awards_back_the_rest(self, record):
+        call_command(
+            "clear_trial_plays", "--through", record.isoformat(), "--confirm", "--expect", "1",
+        )
+        assert self.codes() == {"test-old-app", "test-legend", "test-bests"}
+
+    # Catches the re-award running outside the delete's transaction: a
+    # failure there would leave the plays gone and the badges half done.
+    def test_a_failing_re_award_rolls_the_play_delete_back(self, record, monkeypatch):
+        def explode(*args, **kwargs):
+            raise RuntimeError("simulated")
+
+        monkeypatch.setattr(
+            "training.management.commands.clear_trial_plays.award_deck_badges", explode
+        )
+        before = self.codes()
+        with pytest.raises(RuntimeError):
+            call_command(
+                "clear_trial_plays", "--through", record.isoformat(),
+                "--confirm", "--expect", "1",
+            )
+        assert Play.objects.count() == 2
+        assert self.codes() == before
+
+    # Catches the dry run not saying how many badges would go, or counting a
+    # Legend that is kept.
+    def test_the_dry_run_prints_the_deck_badge_count(self, record):
+        out = StringIO()
+        call_command("clear_trial_plays", "--through", record.isoformat(), stdout=out)
+        assert "2 deck badges would be cleared" in out.getvalue()
+        assert Play.objects.count() == 2
 
 
 # --- admin -------------------------------------------------------------------

@@ -49,3 +49,14 @@ nullable `PositiveSmallIntegerField` AddFields on Play (`points`, `medal`,
 (>=0)`: **no table rebuild** (nullable, no default => SQLite ADD COLUMN, unlike
 0007). Existing rows get NULL, which passes the CHECK. Additive, loses nothing.
 Applied on dev; `makemigrations --check` clean at 0009.
+
+**0010_badge_retire_and_deck_kinds (read 2026-10-04, uncommitted on deck-step-2b)**
+- `AddField Badge.is_active BooleanField(default=True)` + `AlterField Badge.kind`
+(choices only). `sqlmigrate`: **table rebuild** of `training_badge` (NOT NULL
+with default => remake, like 0007): INSERT SELECT carries `id` explicitly, so
+`EarnedBadge.badge_id` still points at the same rows; every row gets
+`is_active=1`. AlterField is `-- (no-op)`. Django 5.2.17 schema editor still
+does `PRAGMA foreign_keys = OFF` on enter and `check_constraints()` on exit
+(re-verified in .venv source). Additive, loses nothing. Applied on dev;
+`makemigrations --check` clean. 2a (0009) not yet on Render, so a 2b deploy
+carries 0009+0010 in one `migrate` pass.

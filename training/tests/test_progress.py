@@ -348,6 +348,54 @@ class TestBadges:
         assert "streak-7" not in {b.code for b in earned}
 
 
+def make_badge(code, kind, threshold=0, is_active=True):
+    # Threshold 0: anything that looks at the badge at all would award it.
+    return Badge.objects.create(
+        code=code, name=code, description="", emoji="*",
+        kind=kind, threshold=threshold, is_active=is_active,
+    )
+
+
+class TestBadgesAfterTheDeck:
+    """Deck badges are worked out from plays, at sync; the old award must
+    leave them alone. A retired badge is never awarded, and one he earned
+    stays on his record as a Legend."""
+
+    # Catches award_badges reading a deck kind as 0 >= threshold and handing
+    # it out from ticks, or awarding a retired badge.
+    def test_award_badges_never_awards_a_deck_or_retired_badge(self, will, plan):
+        from training.models import EarnedBadge
+
+        deck_badge = make_badge("test-deck", Badge.FREE_PLAYS)
+        retired = make_badge("test-retired", Badge.TOTAL_DRILLS, is_active=False)
+        earned = progress.award_badges(will, MONDAY)
+        assert deck_badge not in earned and retired not in earned
+        assert not EarnedBadge.objects.filter(badge__in=[deck_badge, retired]).exists()
+
+    # Catches the old Progress page listing deck badges, or a retired badge
+    # he never earned as something still to chase.
+    def test_badge_progress_hides_deck_badges_and_unearned_retired_ones(self, will, plan):
+        make_badge("test-deck", Badge.FREE_PLAYS)
+        make_badge("test-retired", Badge.TOTAL_DRILLS, is_active=False)
+        live = make_badge("test-live", Badge.TOTAL_DRILLS, threshold=5)
+        codes = {row["badge"].code for row in progress.badge_progress(will, MONDAY)}
+        assert codes == {live.code}
+
+    # Catches retiring a badge taking it off his record: one he earned stays,
+    # tagged Legend, on the Progress page itself.
+    def test_a_retired_badge_he_earned_stays_as_a_legend(self, client, will, plan):
+        from training.models import EarnedBadge
+
+        retired = make_badge("test-retired", Badge.TOTAL_DRILLS, is_active=False)
+        client.force_login(will)
+        assert "Legend" not in client.get("/progress/").content.decode()
+
+        EarnedBadge.objects.create(athlete=will, badge=retired, earned_on=MONDAY)
+        [row] = [r for r in progress.badge_progress(will, MONDAY) if r["badge"] == retired]
+        assert row["legend"] is True and row["earned"] is True
+        assert "Legend" in client.get("/progress/").content.decode()
+
+
 class TestTodaySummary:
     def test_marks_what_is_already_done(self, will, plan, drill):
         summary = progress.today_summary(will, MONDAY)

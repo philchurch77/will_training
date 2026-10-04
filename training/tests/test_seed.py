@@ -140,9 +140,16 @@ class TestSeedShape:
         # the two would collide on the username.)
         from training.views import get_athlete
 
+        # The deck's badges are measured by deck_rules from his plays instead.
+        from training.deck_rules import deck_badge_values
+
         values = progress._badge_values(get_athlete(), date(2026, 8, 10))
+        deck_values = deck_badge_values([])
         for badge in Badge.objects.all():
-            assert badge.kind in values, badge.code
+            if badge.kind in Badge.DECK_KINDS:
+                assert badge.kind in deck_values, badge.code
+            else:
+                assert badge.kind in values, badge.code
 
     def test_there_is_something_left_to_chase_after_a_month(self, seeded):
         # A month of preseason clears the whole original ladder - 30 day

@@ -984,7 +984,33 @@ BADGES = [
      "\U0001f48e", Badge.PERFECT_WEEKS, 1, 12),  # not the passing dartboard
     ("streak-100", "Century", "One hundred days in a row.", "\U0001f4af",
      Badge.STREAK, 100, 13),
+    # The deck's badges (leg 2b), awarded at sync by deck_rules from his plays.
+    # Rewards go to scores and the weak foot, and to weeks hitting the goal -
+    # never to days in a row on their own.
+    ("weeks-3", "3 weeks", "Hit your weekly goal three weeks in a row.", "\U0001f4c5",
+     Badge.GOAL_WEEKS_RUN, 3, 20),
+    ("weeks-10", "10 weeks", "Hit your weekly goal ten weeks in a row.", "\U0001f3c6",
+     Badge.GOAL_WEEKS_RUN, 10, 21),
+    ("season", "Season", "Hit your weekly goal thirty times.", "⚽",
+     Badge.GOAL_WEEKS_TOTAL, 30, 22),
+    ("gold-medal", "Gold medal", "Won your first gold on a move.", "\U0001f947",
+     Badge.MOVE_GOLDS, 1, 23),
+    ("record-breaker", "Record breaker", "Beat your own best ten times.", "\U0001f4c8",
+     Badge.PERSONAL_BESTS, 10, 24),
+    ("test-week-done", "Test week done", "Played all six test cards in a test week.",
+     "\U0001f4cb", Badge.TEST_WEEKS, 1, 25),
+    ("weak-foot-closer", "Weak foot closer",
+     "In a test week, your weak foot was nearly as good as your strong foot.", "\U0001f9b6",
+     Badge.WEAK_FOOT_CLOSER, 1, 26),
+    ("free-player", "Free player", "Logged a kickabout. Play counts.", "\U0001f3d6️",
+     Badge.FREE_PLAYS, 1, 27),
 ]
+
+# Badges switched off but kept: never awarded again, and one he already earned
+# stays on his record tagged Legend. An explicit list, like RETIRED for
+# drills, so a badge added in the admin is not switched off by the next
+# deploy. Empty until the switch-over (leg 3 of docs/chart/deck.md).
+RETIRED_BADGES = []
 
 
 class Command(BaseCommand):
@@ -1095,6 +1121,7 @@ class Command(BaseCommand):
                     "kind": kind,
                     "threshold": threshold,
                     "order": order,
+                    "is_active": code not in RETIRED_BADGES,
                 },
             )
 

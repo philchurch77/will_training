@@ -17,6 +17,7 @@ Pure functions that take the date, like progress.py: the tests pin dates.
 See docs/chart/deck.md, "Leg 2 decisions", for why each number is what it is.
 """
 
+from collections import defaultdict, namedtuple
 from datetime import date, timedelta
 
 from .deck_data import MOVES
@@ -49,8 +50,26 @@ SKILL_ORDER = [move[0] for move in MOVES]
 BLOCKS_START = date(2026, 10, 5)  # a Monday
 BLOCK_WEEKS = 4
 
-# A deck session is this many different cards on one day.
+# A deck session is this many different cards on one day; free play is one
+# card like any other. A goal week is GOAL_SESSIONS sessions in a Mon-Sun week.
+# deck.js counts sessions too, for the weekly bar - the one rule written in
+# both places. Change both.
 SESSION_CARDS = 3
+GOAL_SESSIONS = 3
+FREE_PLAY = "free-play"
+
+# Test week: all six of these played in one test week. Weak foot closer: the
+# first card, in a test week, with the weak foot at least this percentage of
+# the strong one.
+TEST_CARDS = [
+    "toe-taps-30",
+    "foundations-30",
+    "rebounder-two-touch",
+    "slalom-race",
+    "corners",
+    "keepy-ups-best",
+]
+WEAK_FOOT_CLOSER = ("rebounder-two-touch", 80)
 
 # Weeks of calendar baked into the page. A phone offline for longer than this
 # simply shows no skill of the week until it next loads with signal.
@@ -104,9 +123,159 @@ def rules_json(today):
         "weak_foot_cards": WEAK_FOOT_CARDS,
         "levels": [{"name": name, "points": points} for name, points in LEVELS],
         "session_cards": SESSION_CARDS,
+        "goal_sessions": GOAL_SESSIONS,
+        "test_cards": TEST_CARDS,
+        "free_play": FREE_PLAY,
         # A week back, so a phone whose clock sits either side of midnight on
         # a Monday still finds its week.
         "calendar": calendar(today - timedelta(weeks=1)),
         # Where leg 3 puts the points his old history converts into.
         "starting_points": 0,
     }
+
+
+# --- history: sessions, goal weeks, badges ----------------------------------
+# Worked out on the server from his Play rows, for the badges awarded at sync.
+# Pure functions over plain rows, so the tests need no database.
+#
+# The badges trust the stamps (medal, bests) the phone wrote: working them
+# out again here would write the medal and best rules a second time, and could
+# disagree with levels the same gold has already opened on the phone.
+# _parse_stamp in deck_views.py holds the checks that stay true whatever the
+# targets become. See docs/chart/deck.md, "Leg 2b decisions".
+
+Row = namedtuple("Row", "date card move score weak_score medal bests")
+
+
+def session_dates(rows):
+    """Days with at least SESSION_CARDS different cards played."""
+    cards = defaultdict(set)
+    for row in rows:
+        cards[row.date].add(row.card)
+    return {day for day, slugs in cards.items() if len(slugs) >= SESSION_CARDS}
+
+
+def goal_mondays(dates):
+    """Mondays of weeks with at least GOAL_SESSIONS session days."""
+    per_week = defaultdict(int)
+    for day in dates:
+        per_week[monday_of(day)] += 1
+    return {monday for monday, n in per_week.items() if n >= GOAL_SESSIONS}
+
+
+def run_before(mondays, today):
+    """Goal weeks in a row, ending the week before this one."""
+    week = monday_of(today) - timedelta(weeks=1)
+    run = 0
+    while week in mondays:
+        run += 1
+        week -= timedelta(weeks=1)
+    return run
+
+
+def goal_weeks_run(mondays, today):
+    """The run as it stands. This week adds one once it is a goal week, and
+    never breaks the run while it is still going on."""
+    return run_before(mondays, today) + (1 if monday_of(today) in mondays else 0)
+
+
+def longest_run(mondays):
+    best = run = 0
+    previous = None
+    for monday in sorted(mondays):
+        run = run + 1 if previous and monday - previous == timedelta(weeks=1) else 1
+        best = max(best, run)
+        previous = monday
+    return best
+
+
+def goal_weeks_json(mondays, today):
+    """What the phone needs to show weeks in a row: the run up to last week.
+    The phone adds this week itself, from its own plays, so it is right
+    offline. `monday` says which week `before` was worked out for."""
+    this_monday = monday_of(today)
+    return {
+        "monday": this_monday.isoformat(),
+        "before": run_before(mondays, today),
+        "total_before": sum(1 for m in mondays if m < this_monday),
+    }
+
+
+def deck_badge_values(rows):
+    """The value of each deck badge kind, from every play he has made."""
+    from .models import Badge, Play
+
+    rows = list(rows)
+    mondays = goal_mondays(session_dates(rows))
+    test_weeks = defaultdict(set)
+    closer_card, closer_percent = WEAK_FOOT_CLOSER
+    closer = set()  # test weeks in which he closed the gap - one each
+    for row in rows:
+        if not is_test_week(row.date):
+            continue
+        test_weeks[monday_of(row.date)].add(row.card)
+        if (
+            row.card == closer_card
+            and row.score
+            and row.weak_score is not None
+            and row.weak_score * 100 >= closer_percent * row.score
+        ):
+            closer.add(monday_of(row.date))
+    return {
+        # The best run ever, because a badge is permanent.
+        Badge.GOAL_WEEKS_RUN: longest_run(mondays),
+        Badge.GOAL_WEEKS_TOTAL: len(mondays),
+        Badge.MOVE_GOLDS: sum(1 for r in rows if r.move and r.medal == Play.GOLD),
+        Badge.PERSONAL_BESTS: sum(r.bests or 0 for r in rows),
+        Badge.TEST_WEEKS: sum(1 for slugs in test_weeks.values() if set(TEST_CARDS) <= slugs),
+        Badge.WEAK_FOOT_CLOSER: len(closer),
+        Badge.FREE_PLAYS: sum(1 for r in rows if r.card == FREE_PLAY),
+    }
+
+
+# --- reads and writes the database ------------------------------------------
+
+
+def deck_rows(athlete):
+    """Every play he has made as Rows, retired cards included - a badge
+    reads his whole record, and retiring a card must not take one away."""
+    from .models import Play
+
+    return [
+        Row(*values)
+        for values in Play.objects.filter(athlete=athlete).values_list(
+            "date", "card__slug", "card__move", "score", "weak_score", "medal", "bests"
+        )
+    ]
+
+
+def goal_weeks_for(athlete, today):
+    return goal_weeks_json(goal_mondays(session_dates(deck_rows(athlete))), today)
+
+
+def award_deck_badges(athlete, today):
+    """Award any deck badge newly earned. Returns the badges awarded now.
+
+    Never deletes or revokes: already earned stays earned. Each award is made
+    in its own savepoint, so two syncs racing to award the same badge leave
+    one row and no error - the unique constraint decides, never a get().
+    """
+    from django.db import IntegrityError, transaction
+
+    from .models import Badge, EarnedBadge
+
+    values = deck_badge_values(deck_rows(athlete))
+    already = set(
+        EarnedBadge.objects.filter(athlete=athlete).values_list("badge_id", flat=True)
+    )
+    newly = []
+    for badge in Badge.objects.filter(is_active=True, kind__in=Badge.DECK_KINDS):
+        if badge.id in already or values.get(badge.kind, 0) < badge.threshold:
+            continue
+        try:
+            with transaction.atomic():
+                EarnedBadge.objects.create(athlete=athlete, badge=badge, earned_on=today)
+        except IntegrityError:
+            continue
+        newly.append(badge)
+    return newly

@@ -10,12 +10,14 @@ Retiring is the supported way to take a drill out of circulation: add its slug
 to RETIRED in seed_drills.py, which sets is_active=False and leaves the row.
 """
 
+from datetime import date
+
 import pytest
 from django.contrib.admin.sites import site
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from training.models import Drill, Skill
+from training.models import Badge, Drill, EarnedBadge, Skill
 
 pytestmark = pytest.mark.django_db
 
@@ -84,3 +86,47 @@ class TestAdminCannotDeleteDrillsOrSkills:
         assert response.status_code == 403
         assert Skill.objects.filter(pk=skill.pk).exists()
         assert Drill.objects.filter(pk=drill.pk).exists()
+
+
+@pytest.fixture
+def earned(db, will):
+    """One badge he has earned. EarnedBadge.badge is CASCADE, so deleting the
+    badge in the admin would take his award with it."""
+    badge = Badge.objects.create(
+        code="test-badge", name="Test", description="", emoji="*",
+        kind=Badge.FREE_PLAYS, threshold=1,
+    )
+    return EarnedBadge.objects.create(athlete=will, badge=badge, earned_on=date(2026, 10, 1))
+
+
+class TestAdminCannotDeleteBadges:
+    # Catches NoDeleteMixin being dropped from BadgeAdmin or
+    # EarnedBadgeAdmin: a Delete button, or the bulk action, back on screen.
+    @pytest.mark.parametrize("model", [Badge, EarnedBadge])
+    def test_badge_admins_refuse_delete_and_offer_no_bulk_delete(
+        self, rf, coach, earned, model
+    ):
+        request = rf.get("/admin/")
+        request.user = coach
+        admin = site._registry[model]
+        obj = earned.badge if model is Badge else earned
+        assert admin.has_delete_permission(request) is False
+        assert admin.has_delete_permission(request, obj) is False
+        assert "delete_selected" not in admin.get_actions(request)
+
+    # Over HTTP: deleting the badge would cascade to his award.
+    def test_posting_the_delete_url_does_not_delete_a_badge(self, client, coach, earned):
+        client.force_login(coach)
+        url = reverse("admin:training_badge_delete", args=[earned.badge.pk])
+        assert client.post(url, {"post": "yes"}).status_code == 403
+        assert Badge.objects.filter(pk=earned.badge.pk).exists()
+        assert EarnedBadge.objects.filter(pk=earned.pk).exists()
+
+    # And the award itself: already earned stays earned.
+    def test_posting_the_delete_url_does_not_delete_an_earned_badge(
+        self, client, coach, earned
+    ):
+        client.force_login(coach)
+        url = reverse("admin:training_earnedbadge_delete", args=[earned.pk])
+        assert client.post(url, {"post": "yes"}).status_code == 403
+        assert EarnedBadge.objects.filter(pk=earned.pk).exists()

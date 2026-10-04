@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from training.deck_data import seed_deck
 from training.deck_views import MAX_BATCH, MAX_SCORE, OLDEST_PLAY_DAYS
-from training.models import Card, Play
+from training.models import Badge, Card, EarnedBadge, Play
 
 pytestmark = pytest.mark.django_db
 
@@ -81,7 +81,9 @@ class TestPlaysApiAccess:
         mine = play()
         post(client, [mine])
         client.force_login(other)
-        assert client.get(URL).json() == {"plays": []}
+        body = client.get(URL).json()
+        assert body["plays"] == []
+        assert body["earned"] == []
 
     # Catches a resend path that overwrites, or quietly claims, someone
     # else's play by guessing its id.
@@ -475,6 +477,13 @@ class TestDeckServiceWorker:
     def test_the_cache_was_bumped_for_the_game_layer(self, client, deck):
         assert "const CACHE = 'will-training-v21';" not in self.body(client)
 
+    # Catches 2b's deck.js (badges, the week bar, the server cache) shipping
+    # under 2a's cache name: phones would keep the script with none of it.
+    def test_the_cache_was_bumped_for_goals_and_badges(self, client, deck):
+        body = self.body(client)
+        assert "const CACHE = 'will-training-v22';" not in body
+        assert "const CACHE = 'will-training-v21';" not in body
+
 
 # --- H. deck.js, read as source ----------------------------------------------
 
@@ -613,6 +622,16 @@ class TestDeckScript:
         assert "realBest(before.score) !== null" in self.function_body("stamp")
         assert "realBest(best) === null" in self.function_body("verdict")
 
+    # Catches the weeks-in-a-row line vanishing every Monday: before the
+    # phone syncs, the server's figure is for last week and must be rolled on
+    # from his own plays, not dropped.
+    def test_weeks_in_a_row_survives_a_monday_before_sync(self):
+        body = self.function_body("weekStatus")
+        assert "addDays(monday, -7)" in body
+        assert "gw.before + 1" in body
+        # And a moved weeks figure from the server redraws the hand.
+        assert "return moved" in self.function_body("noteServer")
+
     # Catches free play saving silently again: a level-up it caused was
     # applied and never shown.
     def test_free_play_shows_what_it_earned(self):
@@ -627,3 +646,240 @@ class TestDeckScript:
         body = self.function_body("runTimedBar")
         for banned in ("RULES", "points", "medal", "stamp", "level"):
             assert banned not in body, f"runTimedBar mentions {banned}"
+
+    # --- leg 2b: goals and badges ---
+
+    # Catches free play being left out of the day's count again: the server
+    # counts it as one of the three (deck_rules.session_dates), so the hand
+    # would say "2 of 3" on a day the server already calls a session.
+    def test_the_hand_counts_free_play_as_a_card(self):
+        body = self.function_body("renderHand")
+        assert "!== FREE_PLAY" not in body
+        assert "!= FREE_PLAY" not in body
+        assert "Object.keys(done).length" in body
+
+    # Catches the weekly bar carrying its own copy of the session or goal
+    # numbers instead of reading deck_rules through RULES.
+    def test_the_week_reads_session_and_goal_numbers_from_rules(self):
+        # The session size is counted in sessionsBetween, the goal in weekStatus.
+        body = self.function_body("weekStatus") + self.function_body("sessionsBetween")
+        assert "RULES.session_cards" in body
+        assert "RULES.goal_sessions" in body
+        assert not re.search(r"(>=|>|===)\s*\d", body), "weekStatus compares against a literal"
+
+    # Catches the server cache key changing, which would forget every badge
+    # the phone has been told about and celebrate them all again.
+    def test_the_server_key_is_unchanged(self):
+        assert "var SERVER_KEY = 'will-deck-server-v1';" in self.compact()
+
+    # Catches the phone's earned list shrinking: already earned stays earned,
+    # whatever one sync's answer happens to say.
+    def test_note_server_only_ever_adds_to_earned(self):
+        body = self.function_body("noteServer")
+        assert "s.earned.push(code)" in body
+        assert "splice" not in body
+        assert "filter" not in body
+        assert not re.search(r"s\.earned\s*=[^=]", body), "noteServer reassigns s.earned"
+
+    # Catches the badge flash clearing a badge an old cached page cannot
+    # name: it would never be celebrated anywhere.
+    def test_badge_flash_clears_only_badges_it_can_name(self):
+        body = self.function_body("badgeFlash")
+        assert re.search(
+            r"s\.unseen = s\.unseen\.filter\(function \(code\) \{ return !badgeByCode\(code\); \}\)",
+            body,
+        )
+        assert not re.search(r"s\.unseen\s*=\s*\[\]", body)
+
+
+# --- I. leg 2b: badges at sync, one user's own ---------------------------------
+
+
+@pytest.fixture
+def badges(db):
+    """The deck's badges exactly as seed_drills ships them."""
+    from training.management.commands.seed_drills import BADGES
+
+    for code, name, description, emoji, kind, threshold, order in BADGES:
+        if kind in Badge.DECK_KINDS:
+            Badge.objects.create(
+                code=code, name=name, description=description, emoji=emoji,
+                kind=kind, threshold=threshold, order=order,
+            )
+
+
+def free_play(**over):
+    return play("free-play", score=None, **over)
+
+
+def deck_badges_in(response):
+    match = re.search(
+        r'<script id="deck-badges" type="application/json">(.*?)</script>',
+        response.content.decode(), re.S,
+    )
+    assert match, "the badges are no longer baked into the page as deck-badges"
+    return json.loads(match.group(1))
+
+
+class TestDeckBadgeIsolation:
+    # Catches the GET's earned list or goal weeks losing the athlete filter:
+    # another account's Free player would show on Will's phone as his.
+    def test_another_users_badge_is_not_in_wills_get(self, client, deck, badges, will, other):
+        client.force_login(other)
+        assert "free-player" in post(client, [free_play()]).json()["badges"]
+        client.force_login(will)
+        body = client.get(URL).json()
+        assert body["earned"] == []
+        assert body["goal_weeks"]["before"] == 0
+
+    # Catches the award reading every user's plays: Will's first ordinary
+    # play would be answered with the other account's badge.
+    def test_another_users_plays_award_will_nothing(self, client, deck, badges, will, other):
+        client.force_login(other)
+        post(client, [free_play()])
+        client.force_login(will)
+        body = post(client, [play()]).json()
+        assert body["badges"] == []
+        assert body["goal_weeks"]["before"] == 0
+        assert not EarnedBadge.objects.filter(athlete=will).exists()
+
+    # Catches _deck_badges_json marking a badge earned because anyone earned
+    # it, rather than the signed-in user.
+    def test_the_page_marks_nothing_earned_from_another_users_award(
+        self, client, deck, badges, will, other
+    ):
+        client.force_login(other)
+        post(client, [free_play()])
+        client.force_login(will)
+        rows = deck_badges_in(client.get(reverse("training:deck")))
+        assert rows, "no deck badges baked in at all"
+        assert not any(row["earned"] for row in rows)
+
+    # Catches the staff refusal moving after the award: the coach account
+    # collects no deck badges, any more than plays.
+    def test_a_staff_post_is_refused_and_awards_nothing(self, client, deck, badges):
+        coach = get_user_model().objects.create_user(
+            username="coach", password="x", is_staff=True
+        )
+        client.force_login(coach)
+        assert post(client, [free_play()]).status_code == 403
+        assert not EarnedBadge.objects.exists()
+
+    # Catches a signed-out sync reaching the award.
+    def test_a_signed_out_post_is_a_401_and_awards_nothing(self, client, deck, badges):
+        assert post(client, [free_play()]).status_code == 401
+        assert not EarnedBadge.objects.exists()
+
+
+class TestDeckBadgeAwarding:
+    # Catches the award not running at sync, or not answering the codes the
+    # phone celebrates.
+    def test_a_free_play_awards_free_player_dated_today(self, client, deck, badges, will):
+        client.force_login(will)
+        body = post(client, [free_play()]).json()
+        assert body["badges"] == ["free-player"]
+        earned = EarnedBadge.objects.get(athlete=will, badge__code="free-player")
+        assert earned.earned_on == timezone.localdate()
+
+    # Catches a resend awarding again: a second row, or a second celebration.
+    def test_a_resend_awards_nothing_new_and_keeps_one_row(self, client, deck, badges, will):
+        client.force_login(will)
+        p = free_play()
+        post(client, [p])
+        body = post(client, [p]).json()
+        assert body["saved"] == [p["id"]]
+        assert body["badges"] == []
+        assert EarnedBadge.objects.filter(athlete=will, badge__code="free-player").count() == 1
+
+    # Catches awarding only when a play is newly inserted: a sync whose award
+    # was lost must be put right by the resend alone.
+    def test_a_resend_alone_awards_a_badge_that_was_lost(self, client, deck, badges, will):
+        client.force_login(will)
+        p = free_play()
+        post(client, [p])
+        EarnedBadge.objects.filter(athlete=will).delete()
+        body = post(client, [p]).json()
+        assert body["badges"] == ["free-player"]
+        assert EarnedBadge.objects.filter(athlete=will, badge__code="free-player").exists()
+
+    # Catches a badge failure taking the sync down: the play must be saved and
+    # acknowledged, or the phone resends it forever.
+    def test_an_award_that_raises_still_saves_the_play(
+        self, client, deck, badges, will, monkeypatch
+    ):
+        def explode(*args, **kwargs):
+            raise RuntimeError("simulated")
+
+        monkeypatch.setattr("training.deck_views.award_deck_badges", explode)
+        client.force_login(will)
+        p = free_play()
+        response = post(client, [p])
+        assert response.status_code == 200
+        assert response.json()["saved"] == [p["id"]]
+        assert response.json()["badges"] == []
+        assert Play.objects.filter(pk=p["id"]).exists()
+
+    # Catches the award re-checking earned badges against today's threshold:
+    # raising a threshold must never take a badge off him.
+    def test_an_earned_badge_survives_its_threshold_being_raised(
+        self, client, deck, badges, will
+    ):
+        client.force_login(will)
+        post(client, [free_play()])
+        Badge.objects.filter(code="free-player").update(threshold=50)
+        post(client, [play()])
+        assert EarnedBadge.objects.filter(athlete=will, badge__code="free-player").exists()
+        assert "free-player" in client.get(URL).json()["earned"]
+
+    # Catches award_deck_badges dropping its is_active filter: a retired badge
+    # would be handed out new.
+    def test_an_inactive_badge_is_never_awarded(self, client, deck, badges, will):
+        Badge.objects.filter(code="free-player").update(is_active=False)
+        client.force_login(will)
+        assert post(client, [free_play()]).json()["badges"] == []
+        assert not EarnedBadge.objects.filter(badge__code="free-player").exists()
+
+
+class TestStampCrossChecks:
+    """Gold medal and Record breaker trust the stamp, so a stamp the card
+    could never have earned is dropped. The play itself is always kept."""
+
+    # Catches each cross-check in _parse_stamp being loosened. Free play is
+    # sent with a score so the medal-needs-a-score check cannot be what drops
+    # it, and the one-foot card carries a weak score that must not count.
+    @pytest.mark.parametrize(
+        "card, scores, stamp",
+        [
+            ("free-play", {"score": 5}, {"points": 10, "medal": 1}),
+            ("free-play", {"score": 5}, {"points": 10, "bests": 1}),
+            ("toe-taps-30", {"score": 0}, {"points": 10, "medal": 3}),
+            ("chop-1", {"score": 12, "weak_score": None}, {"points": 10, "medal": 3}),
+            ("chop-1", {"score": 12, "weak_score": 0}, {"points": 10, "medal": 3}),
+            ("toe-taps-30", {"score": 40, "weak_score": 30}, {"points": 10, "bests": 2}),
+            ("chop-1", {"score": 12, "weak_score": None}, {"points": 10, "bests": 2}),
+        ],
+        ids=[
+            "unscored-card-medal", "unscored-card-best", "medal-on-zero",
+            "per-foot-medal-no-weak", "per-foot-medal-weak-zero",
+            "two-bests-one-foot-card", "two-bests-one-foot-scored",
+        ],
+    )
+    def test_an_impossible_stamp_is_dropped_and_the_play_kept(
+        self, client, deck, will, card, scores, stamp
+    ):
+        client.force_login(will)
+        p = play(card, **{"weak_score": None, **scores, **stamp})
+        body = post(client, [p]).json()
+        assert body["saved"] == [p["id"]]
+        assert body["refused"] == []
+        assert Play.objects.get(pk=p["id"]).score == scores["score"]
+        assert stored_stamp(p["id"]) == NO_STAMP
+
+    # Catches the cross-checks being so strict they drop a real gold with a
+    # best on each foot.
+    def test_a_per_foot_gold_with_two_bests_is_kept(self, client, deck, will):
+        client.force_login(will)
+        stamp = {"points": 110, "medal": 3, "bests": 2}
+        p = play("chop-1", score=14, weak_score=12, **stamp)
+        post(client, [p])
+        assert stored_stamp(p["id"]) == stamp

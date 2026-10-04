@@ -81,13 +81,22 @@ class SessionLogAdmin(admin.ModelAdmin):
 
 
 @admin.register(Badge)
-class BadgeAdmin(admin.ModelAdmin):
-    list_display = ("name", "emoji", "kind", "threshold")
-    list_filter = ("kind",)
+class BadgeAdmin(NoDeleteMixin, admin.ModelAdmin):
+    """Retire a badge with RETIRED_BADGES in seed_drills.py, never delete it.
+
+    EarnedBadge.badge is CASCADE: deleting a badge here takes his award of
+    it with it. A retired badge he earned stays on his record as a Legend.
+    """
+
+    list_display = ("name", "emoji", "kind", "threshold", "is_active")
+    list_filter = ("kind", "is_active")
 
 
 @admin.register(EarnedBadge)
-class EarnedBadgeAdmin(admin.ModelAdmin):
+class EarnedBadgeAdmin(NoDeleteMixin, admin.ModelAdmin):
+    """Already earned stays earned. The one way a badge goes is
+    clear_trial_plays, for Dad's trial before the deck is handed over."""
+
     list_display = ("badge", "athlete", "earned_on")
 
 

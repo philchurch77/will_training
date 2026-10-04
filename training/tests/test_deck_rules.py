@@ -17,17 +17,29 @@ from training.deck_rules import (
     BLOCK_WEEKS,
     BLOCKS_START,
     CALENDAR_WEEKS,
+    FREE_PLAY,
+    GOAL_SESSIONS,
     LEVELS,
     POINTS,
     SKILL_ORDER,
+    TEST_CARDS,
     WEAK_FOOT_CARDS,
+    WEAK_FOOT_CLOSER,
+    Row,
     calendar,
+    deck_badge_values,
+    goal_mondays,
+    goal_weeks_json,
+    goal_weeks_run,
     is_test_week,
+    longest_run,
     rules_json,
+    run_before,
+    session_dates,
     skill_of_week,
 )
 from training.deck_views import STAMP_CEILINGS
-from training.models import Card
+from training.models import Badge, Card
 
 # The thresholds as first shipped. A threshold may come down, never go up.
 LEVEL_CEILINGS = {
@@ -176,3 +188,159 @@ class TestCalendarAndRulesJson:
         mondays = [w["monday"] for w in rules_json(today)["calendar"]]
         assert mondays[0] == deck_rules.monday_of(today - timedelta(weeks=1)).isoformat()
         assert deck_rules.monday_of(today).isoformat() in mondays
+
+    # Catches a 2b key the phone reads going missing: the week bar and the
+    # test-week screen are drawn from these and nothing else.
+    def test_rules_json_carries_the_goal_and_test_week_rules(self):
+        rules = rules_json(date(2026, 10, 14))
+        assert rules["goal_sessions"] == GOAL_SESSIONS
+        assert rules["test_cards"] == TEST_CARDS
+        assert rules["free_play"] == FREE_PLAY
+
+
+# --- leg 2b: sessions, goal weeks and the deck's badges ----------------------
+
+# Week 3 from BLOCKS_START is the first test week; week 7 the second.
+TEST_MONDAY = date(2026, 10, 26)
+NEXT_TEST_MONDAY = date(2026, 11, 23)
+
+
+def row(day, card="toe-taps-30", move="", score=None, weak=None, medal=None, bests=None):
+    return Row(day, card, move, score, weak, medal, bests)
+
+
+def mondays(*days):
+    return {date.fromisoformat(d) for d in days}
+
+
+class TestSessionsAndGoalWeeks:
+    # Catches free play not counting as one of the three, or the count being
+    # plays rather than different cards.
+    def test_a_session_is_three_different_cards_free_play_included(self):
+        day = date(2026, 10, 12)
+        assert session_dates([row(day, "toe-taps-30"), row(day, "corners"), row(day, FREE_PLAY)]) == {day}
+        assert session_dates([row(day, "toe-taps-30")] * 3) == set()
+        assert session_dates([row(day, "toe-taps-30"), row(day, "corners")]) == set()
+
+    # Catches a goal week counted over a rolling seven days instead of one
+    # Mon-Sun week.
+    def test_a_goal_week_is_three_session_days_in_one_mon_sun_week(self):
+        assert goal_mondays({date(2026, 10, 12), date(2026, 10, 13), date(2026, 10, 14)}) == {
+            date(2026, 10, 12)
+        }
+        # Sat, Sun, Mon: three days in a row, two weeks.
+        assert goal_mondays({date(2026, 10, 17), date(2026, 10, 18), date(2026, 10, 19)}) == set()
+
+    # Catches the week still going on breaking the run: on Wednesday he has
+    # not had the chance to hit this week's goal yet.
+    def test_this_week_never_breaks_the_run_and_adds_one_once_hit(self):
+        wednesday = date(2026, 10, 28)
+        done = mondays("2026-10-12", "2026-10-19")
+        assert run_before(done, wednesday) == 2
+        assert goal_weeks_run(done, wednesday) == 2
+        assert goal_weeks_run(done | {date(2026, 10, 26)}, wednesday) == 3
+
+    # Catches a missed week not breaking the run.
+    def test_a_missed_week_breaks_the_run(self):
+        wednesday = date(2026, 10, 28)
+        assert run_before(mondays("2026-10-05", "2026-10-19"), wednesday) == 1
+        assert run_before(mondays("2026-10-05", "2026-10-12"), wednesday) == 0
+
+    # Catches the badge reading the current run, which a gap would lower:
+    # weeks-3 is earned by the best run ever.
+    def test_longest_run_is_the_best_run_across_a_gap(self):
+        assert longest_run(mondays(
+            "2026-10-05", "2026-10-12", "2026-10-19", "2026-11-02", "2026-11-09",
+        )) == 3
+        assert longest_run(set()) == 0
+
+    # Catches the phone's figure counting this week twice: the phone adds
+    # this week from its own plays, so `before` and `total_before` stop at
+    # last week.
+    def test_goal_weeks_json_stops_at_last_week(self):
+        done = mondays("2026-10-05", "2026-10-12", "2026-10-19", "2026-10-26")
+        assert goal_weeks_json(done, date(2026, 10, 28)) == {
+            "monday": "2026-10-26", "before": 3, "total_before": 3,
+        }
+
+    # Catches a run that restarts at the turn of the year.
+    def test_the_run_carries_over_the_turn_of_the_year(self):
+        done = mondays("2026-12-21", "2026-12-28")
+        assert run_before(done, date(2027, 1, 6)) == 2
+        assert longest_run(done | {date(2027, 1, 4)}) == 3
+
+
+class TestDeckBadgeValues:
+    # Catches a gold on any card counting as a move gold, or a silver
+    # counting at all.
+    def test_move_golds_count_only_gold_on_move_cards(self):
+        day = date(2026, 10, 12)
+        values = deck_badge_values([
+            row(day, "chop-1", move="chop", medal=3),
+            row(day, "chop-1", move="chop", medal=2),
+            row(day, "toe-taps-30", medal=3),
+        ])
+        assert values[Badge.MOVE_GOLDS] == 1
+
+    # Catches bests being counted per play rather than per foot.
+    def test_personal_bests_sum_the_bests_on_every_play(self):
+        day = date(2026, 10, 12)
+        values = deck_badge_values([row(day, bests=2), row(day, bests=1), row(day)])
+        assert values[Badge.PERSONAL_BESTS] == 3
+
+    # Catches test week being satisfied by six cards spread over weeks, or by
+    # six cards before the blocks start.
+    def test_test_week_needs_all_six_cards_inside_one_test_week(self):
+        six = [row(TEST_MONDAY + timedelta(days=n % 7), card) for n, card in enumerate(TEST_CARDS)]
+        assert deck_badge_values(six)[Badge.TEST_WEEKS] == 1
+        five_then_one = [row(TEST_MONDAY, card) for card in TEST_CARDS[:5]] + [
+            row(TEST_MONDAY + timedelta(weeks=1), TEST_CARDS[5])
+        ]
+        assert deck_badge_values(five_then_one)[Badge.TEST_WEEKS] == 0
+        early = [row(BLOCKS_START - timedelta(days=7), card) for card in TEST_CARDS]
+        assert deck_badge_values(early)[Badge.TEST_WEEKS] == 0
+
+    # Catches the 80% bar sliding, or a missing or zero foot passing it.
+    @pytest.mark.parametrize(
+        "score, weak, expected",
+        [(100, 80, 1), (100, 79, 0), (0, 0, 0), (100, None, 0)],
+        ids=["exactly-80", "79", "strong-zero", "weak-missing"],
+    )
+    def test_weak_foot_closer_needs_the_weak_foot_at_80_percent(self, score, weak, expected):
+        card, percent = WEAK_FOOT_CLOSER
+        assert percent == 80
+        values = deck_badge_values([row(TEST_MONDAY, card, score=score, weak=weak)])
+        assert values[Badge.WEAK_FOOT_CLOSER] == expected
+
+    # Catches the closer counting plays rather than test weeks, or counting
+    # outside a test week at all.
+    def test_weak_foot_closer_counts_test_weeks_not_plays(self):
+        card, _ = WEAK_FOOT_CLOSER
+        same_week = [row(TEST_MONDAY, card, score=40, weak=40), row(TEST_MONDAY + timedelta(days=2), card, score=40, weak=36)]
+        assert deck_badge_values(same_week)[Badge.WEAK_FOOT_CLOSER] == 1
+        two_weeks = same_week + [row(NEXT_TEST_MONDAY, card, score=40, weak=40)]
+        assert deck_badge_values(two_weeks)[Badge.WEAK_FOOT_CLOSER] == 2
+        not_test_week = [row(TEST_MONDAY + timedelta(weeks=1), card, score=40, weak=40)]
+        assert deck_badge_values(not_test_week)[Badge.WEAK_FOOT_CLOSER] == 0
+
+    # Catches free play being counted from any unscored play rather than the
+    # free-play card.
+    def test_free_plays_count_free_play_rows(self):
+        day = date(2026, 10, 12)
+        values = deck_badge_values([row(day, FREE_PLAY), row(day, FREE_PLAY), row(day)])
+        assert values[Badge.FREE_PLAYS] == 2
+
+
+@pytest.mark.django_db
+class TestTestCardsExist:
+    # Catches a test card renamed or retired: test week could never be done
+    # and the screen would show five cards.
+    def test_every_test_card_and_the_closer_card_is_active(self):
+        seed_deck()
+        active = set(Card.objects.active().values_list("slug", flat=True))
+        assert set(TEST_CARDS) <= active
+        assert len(set(TEST_CARDS)) == 6
+        closer, _ = WEAK_FOOT_CLOSER
+        assert closer in TEST_CARDS
+        assert Card.objects.get(slug=closer).per_foot is True
+        assert FREE_PLAY in active

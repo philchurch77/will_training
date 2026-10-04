@@ -1,1 +1,1 @@
-- [Enforcement and audit state](project_enforcement.md) — request.user ownership, deck API probes (leg 1, 2a stamps), stamp-trust decision, 2b badge watch item, settings
+- [Enforcement and audit state](project_enforcement.md) — request.user ownership, deck API probes (legs 1, 2a, 2b), stamp-trust decisions, badge awarding, settings

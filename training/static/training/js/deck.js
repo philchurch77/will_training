@@ -64,6 +64,16 @@
   // The one fallback: a page cached before the game still says "play any 3".
   var SESSION_CARDS = RULES ? RULES.session_cards : 3;
 
+  // The deck's badges, as baked into the page: code, name, emoji,
+  // description, legend, earned. Earned is refreshed from the server cache.
+  var BADGES = [];
+  try { BADGES = JSON.parse((document.getElementById('deck-badges') || {}).textContent || '[]'); } catch (e) { BADGES = []; }
+
+  // What only the server can know - badges awarded at sync, and the run of
+  // goal weeks up to last week. A cache, rebuilt from each answer; badges in
+  // it are only ever added, because already earned stays earned.
+  var SERVER_KEY = 'will-deck-server-v1';
+
   // --- storage -------------------------------------------------------------
   // If localStorage is blocked or full, carry on in memory and say so on
   // screen: a play he can see is better than an error, but he must not think
@@ -490,6 +500,7 @@
     cleanups.splice(0).forEach(function (fn) { try { fn(); } catch (e) { /* gone */ } });
     clear(root);
     root.appendChild(warnEl);
+    if (!isCard) { add(root, [badgeFlash()]); }
     add(root, nodes);
     root.appendChild(statusEl);
     paintStatus();
@@ -537,7 +548,7 @@
     if (!RULES) { return null; }
     var points = totalPoints(plays);
     var level = levelFor(points);
-    var fill = el('div', { class: 'bar-fill' });
+    var fill = el('div', { class: 'bar-fill' + (level.part > 0 ? '' : ' is-zero') });
     fill.style.width = Math.round(level.part * 100) + '%';
     var skill = skillMove();
     // Kept light: the cards below are the job, this is the scoreboard.
@@ -551,8 +562,159 @@
       skill ? el('p', { class: 'deck-skill' }, [
         'Skill of the week: ', el('strong', { text: moveName(skill) }), '. Double points.'
       ]) : null,
-      el('a', { class: 'deck-back deck-album-link', href: '#album', text: 'My sticker album ›' })
+      weekBlock(plays)
     ]);
+  }
+
+  // The album and badges are destinations, not the day's job: under the
+  // cards, so the cards stay on the first screen.
+  function gameLinks() {
+    if (!RULES) { return null; }
+    return el('div', { class: 'deck-links' }, [
+      el('a', { class: 'deck-back', href: '#album', text: 'Sticker album ›' }),
+      // Not on a page cached before the badges existed: it has none to show.
+      BADGES.length ? el('a', { class: 'deck-back', href: '#badges', text: 'Badges ›' }) : null
+    ]);
+  }
+
+  // In a test week, the Test week row leads the list, looking like a card -
+  // a side quest, never louder than the cards.
+  function testRow() {
+    var week = thisWeek();
+    if (!week || !week.test || !RULES.test_cards) { return null; }
+    var monday = thisMonday();
+    var done = {};
+    loadPlays().forEach(function (play) { if (play.date >= monday) { done[play.card] = true; } });
+    var count = RULES.test_cards.filter(function (slug) { return done[slug]; }).length;
+    var all = RULES.test_cards.length;
+    return el('a', { class: 'drill-row deck-row deck-test-row', href: '#test' }, [
+      el('span', { class: 'drill-main' }, [
+        el('span', { class: 'drill-name', text: 'Test week' }),
+        el('span', { class: 'drill-meta' }, [el('span', {
+          text: count === all ? 'All ' + all + ' done!' : count + ' of ' + all + ' test cards done'
+        })])
+      ]),
+      el('span', { class: 'chev', 'aria-hidden': 'true', text: '›' })
+    ]);
+  }
+
+  // --- the week ------------------------------------------------------------
+  // Sessions this week from the phone's own plays, so it is right offline. A
+  // session is SESSION_CARDS different cards on one day, free play included;
+  // the same rule is in deck_rules.session_dates - change both.
+  function sessionsBetween(plays, from, to) {
+    var perDay = {};
+    plays.forEach(function (play) {
+      if (play.date < from || play.date > to) { return; }
+      (perDay[play.date] = perDay[play.date] || {})[play.card] = true;
+    });
+    return Object.keys(perDay).filter(function (day) {
+      return Object.keys(perDay[day]).length >= RULES.session_cards;
+    }).length;
+  }
+
+  function addDays(isoDate, days) {
+    var p = isoDate.split('-');
+    return localDate(new Date(+p[0], +p[1] - 1, +p[2] + days));
+  }
+
+  function weekStatus(plays) {
+    var monday = thisMonday();
+    var sessions = sessionsBetween(plays, monday, localDate());
+    var hit = sessions >= RULES.goal_sessions;
+    // Weeks in a row: the server's run to last week, plus this week once it
+    // is a goal week. If the server's figure is a week old - Monday, before
+    // the phone has synced - roll it on from his own plays, or the run would
+    // vanish every Monday morning and read as broken.
+    var gw = loadServer().goal_weeks;
+    var before = null;
+    if (gw && gw.monday === monday) {
+      before = gw.before;
+    } else if (gw && gw.monday === addDays(monday, -7)) {
+      var lastWeek = sessionsBetween(plays, gw.monday, addDays(monday, -1));
+      before = lastWeek >= RULES.goal_sessions ? gw.before + 1 : 0;
+    }
+    var run = before === null ? null : before + (hit ? 1 : 0);
+    return { sessions: sessions, goal: RULES.goal_sessions, hit: hit, run: run };
+  }
+
+  // The weekly bar: one colour, said in words. Weeks in a row only from 1 -
+  // a "0 weeks" reads as a telling-off.
+  function weekBlock(plays) {
+    if (RULES.goal_sessions === undefined) { return null; }  // a page cached before 2b
+    var week = weekStatus(plays);
+    var fill = el('div', { class: 'bar-fill' + (week.sessions ? '' : ' is-zero') });
+    fill.style.width = Math.round(Math.min(1, week.sessions / week.goal) * 100) + '%';
+    return el('div', { class: 'deck-week' }, [
+      el('div', { class: 'deck-week-row' }, [
+        el('span', {}, [
+          el('strong', { text: week.hit ? 'Weekly goal done!' : 'This week: ' }),
+          week.hit ? '' : week.sessions + ' of ' + week.goal + ' sessions'
+        ]),
+        week.run ? el('span', { class: 'deck-run', text: week.run + (week.run === 1 ? ' week' : ' weeks') + ' in a row' }) : null
+      ]),
+      el('div', { class: 'bar-track deck-bar', role: 'img', 'aria-label': week.sessions + ' of ' + week.goal + ' sessions this week' }, [fill])
+    ]);
+  }
+
+  // --- badges --------------------------------------------------------------
+  // Just awarded at sync: celebrated on the next screen he sees that is not
+  // a card he is halfway through, then not again.
+  function badgeFlash() {
+    var s = loadServer();
+    if (!s.unseen.length) { return null; }
+    // Only the ones this page can name are shown and cleared: a page cached
+    // before a badge existed keeps it for the next page that knows it.
+    var known = s.unseen.filter(badgeByCode);
+    if (!known.length) { return null; }
+    var lines = known.map(badgeByCode).map(function (badge) {
+      return el('p', { class: 'deck-levelup' }, [
+        el('span', { 'aria-hidden': 'true', text: badge.emoji + ' ' }),
+        'New badge: ' + badge.name + '!'
+      ]);
+    });
+    s.unseen = s.unseen.filter(function (code) { return !badgeByCode(code); });
+    setItem(SERVER_KEY, JSON.stringify(s));
+    return lines.length ? el('div', { class: 'card deck-flash', role: 'status' }, lines) : null;
+  }
+
+  function renderBadges(keepScroll) {
+    var earned = loadServer().earned;
+    var rows = BADGES.map(function (badge) {
+      var has = badge.earned || earned.indexOf(badge.code) >= 0;
+      return el('div', { class: 'deck-badge' + (has ? ' is-earned' : '') }, [
+        el('span', { class: 'deck-badge-em', 'aria-hidden': 'true', text: badge.emoji }),
+        el('span', { class: 'deck-badge-main' }, [
+          el('span', { class: 'deck-badge-name', text: badge.name }),
+          el('span', { class: 'deck-badge-desc', text: badge.description }),
+          el('span', { class: 'deck-badge-state', text: has ? 'Earned' : 'Not yet' }),
+          badge.legend ? el('span', { class: 'badge-legend', text: 'Legend' }) : null
+        ])
+      ]);
+    });
+    show([
+      el('a', { class: 'deck-back', href: '#', text: '‹ Back to my hand' }),
+      el('h1', { class: 'deck-title', text: 'My badges' }),
+      el('p', { class: 'deck-note', text: 'New badges arrive when the phone has signal.' })
+    ].concat(rows), false, keepScroll);
+  }
+
+  // --- test week -----------------------------------------------------------
+  function renderTest(keepScroll) {
+    var plays = loadPlays();
+    var monday = thisMonday();
+    var doneThisWeek = {};
+    plays.forEach(function (play) { if (play.date >= monday) { doneThisWeek[play.card] = true; } });
+    var cards = RULES.test_cards.map(function (slug) { return BY_SLUG[slug]; }).filter(Boolean);
+    var left = cards.filter(function (card) { return !doneThisWeek[card.slug]; }).length;
+    show([
+      el('a', { class: 'deck-back', href: '#', text: '‹ Back to my hand' }),
+      el('h1', { class: 'deck-title', text: 'Test week' }),
+      el('p', { class: 'deck-best', text: left ? 'Play all six this week to earn Test week done.' : 'All six done. Brilliant!' }),
+      el('div', { class: 'drill-list' }, cards.map(function (card) {
+        return cardRow(card, doneThisWeek[card.slug], plays);
+      }))
+    ], false, keepScroll);
   }
 
   // What a free play just earned, shown once on the next screen drawn.
@@ -590,7 +752,8 @@
     var plays = loadPlays();
     var done = playedOn(plays, localDate());
     var hand = currentHand();
-    var count = Object.keys(done).filter(function (s) { return s !== FREE_PLAY; }).length;
+    // Free play is one of the three, like any other card (deck_rules).
+    var count = Object.keys(done).length;
     var size = SESSION_CARDS;
     var sub = count === 0 ? 'Pick one to start.'
       : count >= size ? count + ' done. That is a session!'
@@ -604,16 +767,17 @@
       ]),
       flashCard(),
       gameStrip(plays),
-      el('div', { class: 'drill-list' }, hand.map(function (slug) {
+      el('div', { class: 'drill-list' }, [testRow()].concat(hand.map(function (slug) {
         return cardRow(BY_SLUG[slug], done[slug], plays);
-      })),
+      }))),
       freePlayButton(done[FREE_PLAY]),
       el('a', { class: 'btn btn-quiet mt', href: '#all', text: 'Pick from the whole deck' }),
       // Last, so a stray thumb does not throw his hand away.
       el('button', {
         type: 'button', class: 'btn btn-quiet mt',
         onclick: function () { dealAgain(hand); }
-      }, ['Deal again'])
+      }, ['Deal again']),
+      gameLinks()
     ], false, keepScroll);
   }
 
@@ -1193,7 +1357,47 @@
   }
 
   // Marks plays sent, and notes why any were refused. Removes nothing.
+  // --- what the server knows -----------------------------------------------
+  function loadServer() {
+    var s = null;
+    try { s = JSON.parse(getItem(SERVER_KEY) || 'null'); } catch (e) { s = null; }
+    s = s || {};
+    return {
+      earned: Array.isArray(s.earned) ? s.earned : [],
+      unseen: Array.isArray(s.unseen) ? s.unseen : [],
+      goal_weeks: s.goal_weeks || null
+    };
+  }
+
+  // Badges are only ever added here. `fresh` are ones just awarded, to be
+  // celebrated on the next screen he sees.
+  function noteServer(earned, fresh, goalWeeks) {
+    var s = loadServer();
+    (earned || []).concat(fresh || []).forEach(function (code) {
+      if (s.earned.indexOf(code) < 0) { s.earned.push(code); }
+    });
+    (fresh || []).forEach(function (code) {
+      if (s.unseen.indexOf(code) < 0) { s.unseen.push(code); }
+    });
+    // Says whether the weeks figure moved, so the hand can be redrawn.
+    var moved = !!goalWeeks && JSON.stringify(goalWeeks) !== JSON.stringify(s.goal_weeks);
+    if (goalWeeks) { s.goal_weeks = goalWeeks; }
+    setItem(SERVER_KEY, JSON.stringify(s));
+    return moved;
+  }
+
+  function badgeByCode(code) {
+    for (var i = 0; i < BADGES.length; i++) { if (BADGES[i].code === code) { return BADGES[i]; } }
+    return null;
+  }
+
   function applyAnswer(body) {
+    if (body) {
+      noteServer([], body.badges, body.goal_weeks);
+      // A badge just landed: show it now if he is not mid-card; if he is,
+      // the next screen he goes to shows it.
+      if (body.badges && body.badges.length) { setTimeout(refreshList, 0); }
+    }
     var saved = {};
     var refused = {};
     var savedCount = 0;
@@ -1228,6 +1432,8 @@
       return res.json().then(function (body) {
         var changed = false;
         if (!body || !Array.isArray(body.plays)) { return false; }
+        // Badges he already has are not news: they go in earned, not unseen.
+        if (noteServer(body.earned, [], body.goal_weeks)) { changed = true; }
         updatePlays(function (list) {
           var mine = {};
           var theirs = {};
@@ -1274,6 +1480,10 @@
       renderAll(keepScroll);
     } else if (hash === 'album' && RULES) {
       renderAlbum(keepScroll);
+    } else if (hash === 'badges' && RULES) {
+      renderBadges(keepScroll);
+    } else if (hash === 'test' && RULES && RULES.test_cards) {
+      renderTest(keepScroll);
     } else {
       renderHand(keepScroll);
     }

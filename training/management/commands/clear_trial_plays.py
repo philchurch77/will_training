@@ -15,6 +15,14 @@ Three things stand between it and his real record:
 * It goes in leg 3 of docs/chart/deck.md: once the deck is on his tab bar,
   every play is his, and this command must be removed.
 
+The deck's badges go with the plays: every active deck-kind EarnedBadge is
+deleted and then awarded again from the plays that are left, in the same
+transaction. A retired (Legend) deck badge is kept - it would never be
+awarded again. Deleting only the ones dated before --through would keep a
+badge that later plays earned only with the trial plays' help. The re-awards
+carry today's date, which costs nothing before hand-over. The old app's
+badges are never touched.
+
 Back the disk up first (CLAUDE.md, Deployment). And clear the site's data on
 every phone the deck was tried on - in the home-screen app if it was played
 there, which on an iPhone keeps its storage apart from Safari's. The phone
@@ -25,11 +33,14 @@ through, because it clears Today's offline queue too.
 
 from datetime import date
 
+from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Count
+from django.utils import timezone
 
-from training.models import Play
+from training.deck_rules import award_deck_badges
+from training.models import Badge, EarnedBadge, Play
 
 BACKUP = (
     "python -c \"import sqlite3,datetime; s=sqlite3.connect('/var/data/db.sqlite3'); "
@@ -65,8 +76,18 @@ class Command(BaseCommand):
         )
         for row in plays.values("athlete__username").annotate(n=Count("pk")).order_by("athlete__username"):
             self.stdout.write(f"  {row['athlete__username']}: {row['n']}")
+        # Retired (Legend) deck badges are kept: they would never be awarded again.
+        deck_badges = EarnedBadge.objects.filter(
+            badge__kind__in=Badge.DECK_KINDS, badge__is_active=True
+        )
         if not count:
             return
+        n = deck_badges.count()
+        if n:
+            self.stdout.write(
+                f"{n} deck {'badge' if n == 1 else 'badges'} would be cleared and "
+                "awarded again from the plays left."
+            )
         if not confirm:
             self.stdout.write(
                 "Nothing deleted. Back the disk up first:\n"
@@ -84,8 +105,14 @@ class Command(BaseCommand):
                 f"--expect {expect} does not match the {count} plays found. "
                 "Nothing deleted. Run without --confirm and read the count again."
             )
+        today = timezone.localdate()
         with transaction.atomic():
             plays.delete()
+            deck_badges.delete()
+            again = 0
+            for athlete in get_user_model().objects.filter(plays__isnull=False).distinct():
+                again += len(award_deck_badges(athlete, today))
         self.stdout.write(self.style.SUCCESS(
-            f"Cleared {count} plays. Now clear the site data on every phone the deck was tried on."
+            f"Cleared {count} plays; {again} deck badges awarded again from the plays left. "
+            "Now clear the site data on every phone the deck was tried on."
         ))

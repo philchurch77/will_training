@@ -336,18 +336,25 @@ def minutes_by_skill(athlete, since=None):
 
 
 def badge_progress(athlete, today):
-    """Every badge, annotated with whether it is earned and how close he is."""
+    """Every badge, annotated with whether it is earned and how close he is.
+
+    The deck's badges are left out: they live on the deck until the
+    switch-over. A retired badge shows only if he earned it, tagged Legend.
+    """
     earned = {
         eb.badge_id: eb for eb in EarnedBadge.objects.filter(athlete=athlete)
     }
     values = _badge_values(athlete, today)
 
     rows = []
-    for badge in Badge.objects.all():
+    for badge in Badge.objects.exclude(kind__in=Badge.DECK_KINDS):
+        if not badge.is_active and badge.id not in earned:
+            continue
         value = values.get(badge.kind, 0)
         rows.append(
             {
                 "badge": badge,
+                "legend": not badge.is_active,
                 "earned": badge.id in earned,
                 "earned_on": earned[badge.id].earned_on if badge.id in earned else None,
                 "value": value,
@@ -384,7 +391,9 @@ def award_badges(athlete, today):
     )
 
     newly = []
-    for badge in Badge.objects.all():
+    # Never a retired badge, and never a deck badge - those are worked out
+    # from his plays, at sync, by deck_rules.award_deck_badges.
+    for badge in Badge.objects.filter(is_active=True).exclude(kind__in=Badge.DECK_KINDS):
         if badge.id in already:
             continue
         if values.get(badge.kind, 0) >= badge.threshold:

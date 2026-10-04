@@ -54,6 +54,14 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
   - *Season* (2b) is 30 goal weeks in total; 3 weeks and 10 weeks are in a row.
   - *Old badges retire at the switch-over* (leg 3), not before; leg 2b builds the Legend tag with nothing retired yet.
 - **Leg 2a decisions forced in build** (3 Oct 2026): a bad stamp is dropped, never a reason to refuse a play; a medal with no score is dropped; a best of 0 is no best; the skill of the week is None before `BLOCKS_START`; `restore()` fills a missing stamp from the server, nulls only; stamps are read-only in the admin; a card's slug, move and level are frozen; free play shows what it earned. For 2b: "Done today" does not yet count free play - 2b's session rule (free play is one of the three) fixes it.
+- **Leg 2b decisions** (4 Oct 2026, Phil took every recommendation):
+  - *Gold medal and Record breaker trust the stamps*, with tighter server checks that hold whatever the targets become (a per-foot card needs both feet for a medal; bests no more than the feet scored; free play stamps 0). Working them out again on the server would write the rules twice and could disagree with levels the same gold already opened. Accepted, after the Master-at-Arms raised it in 2a.
+  - *Trial badges:* `clear_trial_plays` deletes every deck badge and re-awards from the plays left, in one transaction. Before hand-over only.
+  - *Gold medal* is the first gold on any Moves card, any level. *Record breaker* counts each foot that beat its best (a per-foot card can give 2). *Test week done* counts a test card however he opened it, at any score including 0.
+  - *Weeks in a row* shows only from 1; never "0 weeks".
+  - *The kept old badges* stay on Progress until leg 3; the deck's badge screen shows deck badges and Legends.
+  - *Badges and earned badges cannot be deleted in the admin*; `EarnedBadge.badge` is CASCADE.
+- **Leg 2b decisions forced in build** (4 Oct 2026): badges are checked on every sync that holds his plays, and a badge going wrong is logged, never a 500; a medal needs a score above 0 (both feet on a per-foot card); Weak foot closer counts once per test week; `clear_trial_plays` keeps retired (Legend) deck badges; on a Monday before the phone syncs, weeks in a row is rolled on from his own plays; the album and badges links sit under the cards and the Test week row leads the hand.
 - **Rewards are badges and medals, no real-world prizes**, and nothing rewards hours or days in a row on their own: pressure is the main reason children drop out.
 
 ## Legs
@@ -62,7 +70,7 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 |---|---|---|---|---|---|
 | 1 | The deck, saved on the phone | — | Phil, from the coach screen, opens /deck/, is dealt a hand, plays cards with the stepper, stopwatch and timed bar, sees records update - all with no signal, synced to Render when signal returns | Quartermaster, Carpenter, Bosun, Master-at-Arms (new API), Purser (migration 0008, plays), Gunner, Lookout | built 3 Oct 2026 on `deck-step-1`; to try on Render (offline needs HTTPS), then `clear_trial_plays` before hand-over |
 | 2a | Scores that mean something | 1 | Points on every play, player levels, medals, move levels that unlock on gold, the sticker album, skill of the week - all offline | Quartermaster, Carpenter, Bosun, Master-at-Arms (API accepts more), Purser (0009), Gunner, Lookout | built 3 Oct 2026 on `deck-step-2`; deploy carries migration 0009 (back up first) |
-| 2b | Goals and badges | 2a | The weekly goal bar, weeks in a row, test week, the new badges awarded at sync, the Legend tag on retired badges | Carpenter, Bosun, Master-at-Arms, Purser (0010 rebuilds the badge table), Gunner, Lookout | open |
+| 2b | Goals and badges | 2a | The weekly goal bar, weeks in a row, test week, the new badges awarded at sync, the Legend tag on retired badges | Quartermaster, Carpenter, Bosun, Master-at-Arms, Purser (0010 rebuilds the badge table), Gunner, Lookout | built 4 Oct 2026 on `deck-step-2b`; deploy with 2a carries 0009 + 0010 (back up first) |
 | 3 | Switch over | 2 | The deck becomes the home screen; old history shown read-only and converted into starting points and personal bests; the fixed plan screens retired | Full crew; Purser and a disk backup before deploy | open |
 
 ### Leg 2 detail, from the plan
@@ -107,7 +115,6 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 - How old minutes, ticks and per-drill counts convert into starting points and personal bests (leg 3).
 - What `CLAUDE.md` rules retire with the fixed plan at the switch-over, and the `test_seed.py` assertions that go with them (leg 3).
 - `clear_trial_plays` must be deleted in leg 3, once every play is his.
-- **For 2b, decide before building:** the Gold medal and Record breaker badges would naturally read the phone's stamps (`medal`, `bests`), which the server stores but does not re-judge. A badge is permanent, so either work those two out on the server from scores, Card targets and earlier plays, or record here that trusting the stamps was accepted. Master-at-Arms, leg 2a.
 - **For leg 3:** converting his old history must stamp medals as well as points, or his past gold never opens a level. Plays saved before 2a are unstamped and count for nothing.
 - A coach-facing view of plays the server refused, with the reason; today only a count shows on the phone.
 - Whether the phone's plays should be keyed per user; for now the staff 403 stands in for it.
