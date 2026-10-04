@@ -9,7 +9,7 @@
 // Bump this whenever the CSS, JS or icon change - filenames are not
 // content-hashed, and static assets are served cache-first, so an old cache
 // would keep serving the previous stylesheet forever.
-const CACHE = 'will-training-v24';
+const CACHE = 'will-training-v25';
 
 // Built by the view as JSON. A {% templatetag openblock %} for {% templatetag closeblock %} loop with escapejs works too, but
 // escapejs writes every hyphen as a unicode escape, and a precache list you
@@ -28,7 +28,7 @@ self.addEventListener('install', (event) => {
       // one at a time and let stragglers be fetched on demand instead. Not
       // cache.add either: it follows a redirect and keeps whatever is at the
       // end of it, so a signed-out install would store the login page under
-      // /deck/. Only what passes keep() goes in.
+      // /. Only what passes keep() goes in.
       .then((cache) => Promise.all(
         // cache: 'reload' skips the browser's own HTTP cache, which could
         // otherwise hand a new CACHE last deploy's deck.js.

@@ -337,15 +337,17 @@ class TestBadges:
         assert second == []
         assert EarnedBadge.objects.filter(athlete=will).count() == 1
 
-    def test_streak_badge_needs_the_streak(self, will, seeded):
+    # Catches a retired badge being awarded again: the day streaks retired at
+    # the switch-over (leg 3c), so three days in a row earns no streak-3.
+    def test_a_retired_streak_badge_is_never_awarded(self, will, seeded):
         from training.models import Drill
 
         real = Drill.objects.get(slug="toe-taps")
         for day in (MONDAY, TUESDAY, WEDNESDAY):
             tick(will, real, day)
+        assert progress.current_streak(will, WEDNESDAY) >= 3
         earned = progress.award_badges(will, WEDNESDAY)
-        assert "streak-3" in {b.code for b in earned}
-        assert "streak-7" not in {b.code for b in earned}
+        assert "streak-3" not in {b.code for b in earned}
 
 
 def make_badge(code, kind, threshold=0, is_active=True):
@@ -372,28 +374,20 @@ class TestBadgesAfterTheDeck:
         assert deck_badge not in earned and retired not in earned
         assert not EarnedBadge.objects.filter(badge__in=[deck_badge, retired]).exists()
 
-    # Catches the old Progress page listing deck badges, or a retired badge
-    # he never earned as something still to chase.
-    def test_badge_progress_hides_deck_badges_and_unearned_retired_ones(self, will, plan):
-        make_badge("test-deck", Badge.FREE_PLAYS)
-        make_badge("test-retired", Badge.TOTAL_DRILLS, is_active=False)
-        live = make_badge("test-live", Badge.TOTAL_DRILLS, threshold=5)
-        codes = {row["badge"].code for row in progress.badge_progress(will, MONDAY)}
-        assert codes == {live.code}
-
     # Catches retiring a badge taking it off his record: one he earned stays,
-    # tagged Legend, on the Progress page itself.
+    # tagged Legend, in the badge list his Progress tab draws.
     def test_a_retired_badge_he_earned_stays_as_a_legend(self, client, will, plan):
         from training.models import EarnedBadge
 
+        from .test_deck_views import deck_badges_in
+
         retired = make_badge("test-retired", Badge.TOTAL_DRILLS, is_active=False)
         client.force_login(will)
-        assert "Legend" not in client.get("/progress/").content.decode()
+        assert "test-retired" not in {r["code"] for r in deck_badges_in(client.get("/"))}
 
         EarnedBadge.objects.create(athlete=will, badge=retired, earned_on=MONDAY)
-        [row] = [r for r in progress.badge_progress(will, MONDAY) if r["badge"] == retired]
-        assert row["legend"] is True and row["earned"] is True
-        assert "Legend" in client.get("/progress/").content.decode()
+        [shown] = [r for r in deck_badges_in(client.get("/")) if r["code"] == "test-retired"]
+        assert shown["legend"] is True and shown["earned"] is True
 
 
 class TestTodaySummary:

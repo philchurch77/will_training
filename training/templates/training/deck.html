@@ -9,6 +9,7 @@
 <div id="deck" class="deck"
      data-plays-url="{% url 'training:api_plays' %}"
      data-login-url="{% url 'training:login' %}"
+     data-before-url="{% url 'training:before_cards' %}"
      data-csrf="{{ csrf_token }}">
   <div class="card">
     <p class="muted" style="margin:0">Shuffling the deck...</p>

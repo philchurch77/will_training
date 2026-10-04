@@ -41,8 +41,8 @@
   </div>
 {% endif %}
 
-{# The deck, for Dad to try before it goes on Will's tab bar. Outside the plan check: it needs no plan. #}
-<a class="btn btn-quiet mt" href="{% url 'training:deck' %}">Cards (try it)</a>
+{# The old fixed plan, off Will's tab bar since the switch-over. Coach only, until 3d retires it. #}
+<a class="btn btn-quiet mt" href="{% url 'training:today' %}">Old Today screen (until 3d)</a>
 
 <form method="post" action="{% url 'training:logout' %}" class="center mt">
   {% csrf_token %}

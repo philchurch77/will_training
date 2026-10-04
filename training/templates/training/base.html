@@ -22,8 +22,10 @@
   <div class="topbar-in">
     <span class="topbar-title">{% block heading %}{% endblock %}</span>
     {% if user.is_authenticated and not request.in_coach %}
-      {# The session clock, so it is still visible from inside a drill. #}
-      <span class="clockchip" id="clockchip" data-today="{% now 'Y-m-d' %}" hidden></span>
+      {% if tab == 'today' or tab == 'library' %}
+        {# The old plan's session clock, so it is still visible from inside a drill. Never on the deck. #}
+        <span class="clockchip" id="clockchip" data-today="{% now 'Y-m-d' %}" hidden></span>
+      {% endif %}
       {# Deliberately understated: this is Dad's door, not part of Will's app. #}
       <a class="linkbtn" href="{% url 'training:coach_plan' %}">Coach</a>
     {% endif %}
@@ -39,7 +41,8 @@
 <nav class="tabbar">
   {# Drawn rather than typed: emoji render differently on every phone, and these #}
   {# animate on whichever tab he is standing on. #}
-  <a href="{% url 'training:today' %}" class="tab {% if tab == 'today' %}is-on{% endif %}">
+  {# Two tabs since the switch-over (leg 3c). Progress is drawn by deck.js, which lights the tab it is on. #}
+  <a href="{% url 'training:deck' %}" class="tab {% if tab == 'deck' %}is-on{% endif %}" data-tab="cards"{% if tab == 'deck' %} aria-current="page"{% endif %}>
     <span class="tab-ic" aria-hidden="true">
       <svg class="ic ic-ball" viewBox="0 0 24 24" focusable="false">
         <circle class="ic-ball-o" cx="12" cy="12" r="8.5"/>
@@ -48,9 +51,9 @@
           <path d="M12 7.5L12 5.25M16.28 10.61L18.42 9.91M14.65 15.64L15.97 17.46M9.35 15.64L8.03 17.46M7.72 10.61L5.58 9.91"/>
         </g>
       </svg>
-    </span><span>Today</span>
+    </span><span>Cards</span>
   </a>
-  <a href="{% url 'training:progress' %}" class="tab {% if tab == 'progress' %}is-on{% endif %}">
+  <a href="{% url 'training:deck' %}#progress" class="tab {% if tab == 'progress' %}is-on{% endif %}" data-tab="progress"{% if tab == 'progress' %} aria-current="page"{% endif %}>
     <span class="tab-ic" aria-hidden="true">
       <svg class="ic ic-bars" viewBox="0 0 24 24" focusable="false">
         <rect class="ic-bar ic-bar1" x="3.5" y="13" width="4.6" height="7" rx="1.7"/>
@@ -59,21 +62,10 @@
       </svg>
     </span><span>Progress</span>
   </a>
-  <a href="{% url 'training:library' %}" class="tab {% if tab == 'library' %}is-on{% endif %}">
-    <span class="tab-ic" aria-hidden="true">
-      <svg class="ic ic-cone" viewBox="0 0 24 24" focusable="false">
-        <g class="ic-cone-body">
-          <path d="M12 3.5L17.8 18.6H6.2Z"/>
-          <path class="ic-cone-band" d="M9.3 12.6h5.4"/>
-          <path class="ic-cone-base" d="M3.5 20.3h17"/>
-        </g>
-      </svg>
-    </span><span>Drills</span>
-  </a>
 </nav>
 {% endif %}
 
 <script src="{% static 'training/js/app.js' %}" defer></script>
-<script src="{% static 'training/js/session.js' %}" defer></script>
+{% if tab == 'today' or tab == 'library' %}<script src="{% static 'training/js/session.js' %}" defer></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>

@@ -35,3 +35,11 @@ The seeder also does `day.items.all().delete()` on every run, so any plan edit
 Phil makes by hand on the coach screens is wiped by the next deploy.
 
 See [[migrations-read]].
+
+**Local `main`/`origin/main` refs go stale - check the remote.** On
+2026-10-04 local origin/main was still 340583c (leg 1) while `gh pr list
+--state all` showed PR #3 (deck-step-3b) MERGED 10:44Z and `git ls-remote`
+showed main at baff415. render.yaml sets no autoDeploy, so Render's default
+deploys every push to main: 2a+2b+3a+3b (migrations 0009+0010) went to main in
+one merge, not in the chart's staged order. Always `git ls-remote origin` /
+`gh pr list` before believing a briefed deploy order.

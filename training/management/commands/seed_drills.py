@@ -1009,8 +1009,12 @@ BADGES = [
 # Badges switched off but kept: never awarded again, and one he already earned
 # stays on his record tagged Legend. An explicit list, like RETIRED for
 # drills, so a badge added in the admin is not switched off by the next
-# deploy. Empty until the switch-over (leg 3 of docs/chart/deck.md).
-RETIRED_BADGES = []
+# deploy. Retired at the switch-over (leg 3c of docs/chart/deck.md): the day
+# streaks, which weeks in a row replaces, and the two that measured the fixed
+# plan - minutes and every drill of every day.
+RETIRED_BADGES = [
+    "streak-3", "streak-7", "streak-30", "streak-100", "perfect-week", "minutes-500",
+]
 
 
 class Command(BaseCommand):

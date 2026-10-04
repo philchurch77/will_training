@@ -1,7 +1,7 @@
 """The game's numbers, in one place.
 
 Every number the deck's game uses lives here and reaches the phone baked into
-/deck/ as the `deck-rules` block (rules_json). deck.js keeps no copies of its
+/ as the `deck-rules` block (rules_json). deck.js keeps no copies of its
 own: there is no JavaScript test runner in this project, so a number written
 in both places could drift with nothing to notice.
 

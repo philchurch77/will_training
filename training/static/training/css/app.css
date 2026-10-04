@@ -215,7 +215,7 @@ a.drill-row:active { transform: scale(.985); }
   border-top: 1px solid var(--line);
 }
 .records li:first-child .record { border-top: 0; }
-.record:active { opacity: .7; }
+a.record:active { opacity: .7; }
 .record-num {
   flex: 0 0 auto; min-width: 58px;
   font-size: 30px; font-weight: 800; color: var(--accent);
@@ -389,7 +389,6 @@ a.drill-row:active { transform: scale(.985); }
 .stat-lab { font-size: 13px; color: var(--ink-3); text-transform: uppercase;
   letter-spacing: .07em; font-weight: 700; margin-top: 4px; }
 
-.badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .badge {
   text-align: center; padding: 14px 8px;
   background: var(--surface); border: 1px solid var(--line);
@@ -397,7 +396,6 @@ a.drill-row:active { transform: scale(.985); }
 }
 .badge.locked { opacity: .45; }
 .badge-em { font-size: 32px; line-height: 1; }
-.badge-nm { font-size: 12px; font-weight: 700; margin-top: 6px; }
 
 /* --- new badge celebration -------------------------------------------- */
 .newbadge {
@@ -534,7 +532,10 @@ a.drill-row:active { transform: scale(.985); }
   transition: transform .12s ease-out;
 }
 .tab:active .tab-ic { transform: scale(.88); }
-.tab.is-on { color: var(--accent); }
+/* Not colour alone: a bar along the top of the lit tab, and heavier type. */
+.tab.is-on { color: var(--accent); box-shadow: inset 0 3px 0 var(--accent); font-weight: 800; }
+/* The Progress tab's two doors: the album and Before the cards. */
+.deck-doors { display: grid; gap: 10px; margin: 14px 0 22px; }
 
 /* Tab icons are drawn, not typed. They inherit the tab's colour, so the one he
    is standing on turns blue and comes alive; the other two sit still. The
@@ -573,20 +574,6 @@ a.drill-row:active { transform: scale(.985); }
   100% { transform: scaleY(.2); }
 }
 
-/* Drills - a cone tipping on its base, as if someone has just clipped it. */
-.ic-cone-body > :first-child { fill: currentColor; stroke-width: 1.7; }
-.ic-cone-band { stroke: var(--surface); stroke-width: 2.1; }
-.ic-cone-base { stroke-width: 2.3; }
-.ic-cone-body { transform-box: fill-box; transform-origin: 50% 100%; }
-.tab.is-on .ic-cone-body { animation: ic-rock 3.6s ease-in-out infinite; }
-@keyframes ic-rock {
-  0%   { transform: rotate(0deg); }
-  7%   { transform: rotate(-7deg); }
-  16%  { transform: rotate(5deg); }
-  25%  { transform: rotate(-2.5deg); }
-  33%  { transform: rotate(0deg); }
-  100% { transform: rotate(0deg); }
-}
 
 /* --- coach ------------------------------------------------------------ */
 .coach table { width: 100%; border-collapse: collapse; font-size: 15px;

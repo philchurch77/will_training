@@ -88,3 +88,8 @@ active badges only, all athletes, then re-awards in the same atomic block).
 only exists while he has a Play. `clear_trial_plays` with a --through covering
 every play leaves him with none, so the stock User admin delete would again
 cascade SessionLog/SessionClock/EarnedBadge until his first real card.
+
+**After leg 3c (2026-10-04):** `clear_trial_plays` is deleted. No code path
+deletes a Play or an EarnedBadge any more (grepped `.delete(` outside tests:
+only `drill_uncomplete` SessionLog, coach PlanDrill, and the DEBUG-only
+`--reset`). Admin still allows SessionLog delete and stock User delete.

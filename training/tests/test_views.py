@@ -12,7 +12,7 @@ from training.models import Skill
 
 pytestmark = pytest.mark.django_db
 
-CHILD_URLS = ["training:today", "training:progress", "training:library", "training:deck"]
+CHILD_URLS = ["training:today", "training:before_cards", "training:library", "training:deck"]
 COACH_URLS = [
     "training:coach_plan",
     "training:coach_drills",
@@ -43,18 +43,18 @@ class TestPinLogin:
     def test_the_right_pin_gets_in(self, client, will):
         response = client.post(reverse("training:login"), {"pin": "1234"})
         assert response.status_code == 302
-        assert response["Location"] == reverse("training:today")
+        assert response["Location"] == reverse("training:deck")
 
     # The deck's "Sign in to back it up" brings him back to the cards.
     def test_the_right_pin_goes_back_to_a_page_on_this_site(self, client, will):
-        response = client.post(reverse("training:login") + "?next=/deck/", {"pin": "1234"})
-        assert response["Location"] == "/deck/"
+        response = client.post(reverse("training:login") + "?next=/before/", {"pin": "1234"})
+        assert response["Location"] == "/before/"
 
     # Catches the pad becoming an open redirect.
     @pytest.mark.parametrize("target", ["https://evil.example/", "//evil.example/"])
     def test_the_right_pin_never_goes_off_site(self, client, will, target):
         response = client.post(reverse("training:login") + "?next=" + target, {"pin": "1234"})
-        assert response["Location"] == reverse("training:today")
+        assert response["Location"] == reverse("training:deck")
 
     def test_the_wrong_pin_does_not(self, client, will):
         response = client.post(reverse("training:login"), {"pin": "0000"})
@@ -295,12 +295,12 @@ class TestDrillAndLibrary:
         assert client.get(reverse("training:drill", args=["nope"])).status_code == 404
 
 
-class TestProgressScreen:
+class TestBeforeTheCards:
     def test_renders_with_no_data(self, client, will, seeded):
         client.force_login(will)
-        assert client.get(reverse("training:progress")).status_code == 200
+        assert client.get(reverse("training:before_cards")).status_code == 200
 
-    def test_shows_the_streak_and_the_skill_bars(self, client, will, seeded):
+    def test_shows_the_totals_and_the_skill_bars(self, client, will, seeded):
         from training.models import Drill, SessionLog
 
         drill = Drill.objects.get(slug="toe-taps")
@@ -309,18 +309,18 @@ class TestProgressScreen:
             drill=drill, actual_minutes=10,
         )
         client.force_login(will)
-        response = client.get(reverse("training:progress"))
-        assert response.context["streak"] == 1
+        response = client.get(reverse("training:before_cards"))
         assert response.context["total_minutes"] == 10
+        assert response.context["longest"] == 1
         assert len(response.context["skill_rows"]) == 7
-        # The flame is lit only when there is a streak burning.
-        assert b"flame is-out" not in response.content
 
-    def test_the_flame_is_out_with_no_streak(self, client, will, seeded):
+    # Catches a live streak coming back: it breaks the day he switches to
+    # the cards, and on this page it would read as a telling-off.
+    def test_there_is_no_live_streak(self, client, will, seeded):
         client.force_login(will)
-        response = client.get(reverse("training:progress"))
-        assert response.context["streak"] == 0
-        assert b"flame is-out" in response.content
+        response = client.get(reverse("training:before_cards"))
+        assert "streak" not in response.context
+        assert b"flame" not in response.content
 
 
 class TestCoachEditing:

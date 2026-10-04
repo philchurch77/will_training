@@ -25,8 +25,8 @@ uv run manage.py seed_drills     # drills, plan, badges, Will's profile
 uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see below
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, before hand-over only
-uv run pytest                    # 474 tests, ~10 min (3 Today tests fail on Sundays)
+uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, goes in 3d
+uv run pytest                    # ~10 min (3 Today tests fail on Sundays)
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -169,28 +169,36 @@ Function-based views on purpose: one maintainer, re-read in a year.
   the precache while leaving the row - and his history - alone. `RETIRED` is an
   explicit list on purpose: drills can be added by hand on the coach screens,
   and "deactivate anything not in `DRILLS`" would switch those off on the next
-  deploy. One caveat for the next retirement: `progress.best_scores()` iterates
-  `Drill.objects.active()`, so retiring a *rep* drill takes its personal best
-  off the Progress board even though every row survives. Both drills retired so
-  far are minutes-based, where `personal_best()` returns `None` anyway, so
-  nothing is affected yet.
+  deploy. `progress.best_scores()` reads retired drills too (leg 3c), so a
+  retired rep drill keeps his record on Before the cards.
 - **Test fixtures use `test-` prefixed slugs** so they compose with the
   `seeded` fixture, which creates the real drills.
 
-## The deck (legs 1-2b of `docs/chart/deck.md`, not on his tab bar yet)
+## The deck (the app since leg 3c of `docs/chart/deck.md`)
 
-The deck of scored challenge cards is replacing the fixed plan, in three legs;
-read the chart and `CONTEXT.md` before touching it. Until leg 3 it sits
-alongside the old app, reached from Coach -> "Cards (try it)", and nothing in
-it touches a `Drill`, a `SessionLog` or a badge.
+The deck of scored challenge cards replaced the fixed plan at the switch-over;
+read the chart and `CONTEXT.md` before touching it. His tab bar is **Cards**
+and **Progress**, both drawn by `deck.js` on the one page at `/`.
 
 ```
 training/deck_data.py    the 51 cards and seed_deck(); called by seed_drills
-training/deck_views.py   /deck/ (the shell) and /api/plays/ (the backup)
-static/training/js/deck.js   everything he sees and does on /deck/
+training/deck_views.py   / (the shell) and /api/plays/ (the backup)
+static/training/js/deck.js   everything he sees and does on /, Progress included
 ```
 
-- **The deck is drawn on the phone.** `/deck/` is a shell with every active
+- **`/` is the deck and must render, never redirect.** The icon opens `/`,
+  and the service worker refuses to keep a redirected page, so a redirect
+  leaves the icon blank offline. `/deck/` and `/progress/` redirect *to* it
+  for old links. Progress is `/#progress` (`#badges` is an alias), drawn on
+  the phone so it adds up the same plays as the hand; `route()` lights the
+  tab. The old fixed plan lives at `/today/`, off his tab bar, reached from
+  Coach as "Old Today screen (until 3d)"; the tick URLs never moved, because
+  ticks queued on his phone replay to the address they stored. `app.js`
+  sends an offline tick back to `/today/`, not `/`.
+- **Before the cards** (`/before/`) is the old Progress, read-only: best
+  streak, totals, minutes per skill, records. No live streak, no badges, and
+  no link to a drill page - those carry the tick and untick forms.
+- **The deck is drawn on the phone.** `/` is a shell with every active
   card baked in; `deck.js` deals, scores, and keeps every play in
   localStorage (`will-deck-plays-v1`) before sending it to `/api/plays/`. A
   play's id is made on the phone, so a resend changes nothing. No server
@@ -230,8 +238,8 @@ static/training/js/deck.js   everything he sees and does on /deck/
 - **The deck's badges are awarded at sync, on the server, from his plays**
   (leg 2b): `deck_rules.deck_badge_values` over every Play row, retired cards
   included, and `award_deck_badges` when a POST saves a new play. They never
-  go through `progress.award_badges`, and the old Progress page never shows
-  them - `Badge.DECK_KINDS` keeps the two apart until leg 3. Gold medal and
+  go through `progress.award_badges` - `Badge.DECK_KINDS` keeps a tick from
+  awarding one. Gold medal and
   Record breaker trust the phone's stamps; `_parse_stamp` holds the checks
   that stay true whatever the targets become. Already earned stays earned.
 - **The kept old badges count ticks and card plays together** (leg 3b):
@@ -243,22 +251,21 @@ static/training/js/deck.js   everything he sees and does on /deck/
   award step for both. One go on a card is a
   *card-day* (`deck_rules.kept_counts_from_plays`): a different card on a day, free play
   included, never the score. All rounder is the larger of skills tried and
-  packs played, never the sum. The deck's Badges screen shows every deck and
-  kept badge plus anything else he earned; old Progress still hides the deck
-  kinds until 3c.
+  packs played, never the sum. The Progress tab shows every deck and kept
+  badge plus anything else he earned, retired ones tagged Legend.
 - **A deck session is 3 different cards on one day, free play included; a
   goal week is 3 sessions Mon-Sun.** This is the one rule written twice -
   `deck_rules.session_dates` and `weekStatus` in `deck.js`. Change both. The
   current week never breaks a run; weeks in a row is shown only from 1.
 - **A badge is retired, never deleted.** `EarnedBadge.badge` is CASCADE, so
   both badge admins refuse delete. `RETIRED_BADGES` in `seed_drills.py` is an
-  explicit list (empty until leg 3); a retired badge is never awarded again,
-  and one he earned shows tagged Legend. `clear_trial_plays` is the only
-  thing that removes an award: it deletes every active deck badge (Legends
-  are kept) and re-awards from the plays left. Its delete stays bounded by
-  `DECK_KINDS` - **never widen it to the kept badges**: they were earned from
-  real ticks, a re-award rewrites every date, and one whose count fell since
-  would not come back. Run it before 3b reaches Render.
+  explicit list - since 3c the day streaks, Perfect week and 500 minutes; a
+  retired badge is never awarded again, and one he earned shows tagged
+  Legend. `clear_trial_plays` is the only thing that removes an award: it
+  deletes every active deck badge (Legends are kept) and re-awards from the
+  plays left. Its delete stays bounded by `DECK_KINDS` - **never widen it to
+  the kept badges**: they were earned from real ticks, a re-award rewrites
+  every date, and one whose count fell since would not come back.
 - **His old app gives him a head start** (leg 3a), worked out from his
   SessionLog rows on every deck load by `deck_rules.history_for` and written
   nowhere: 5 points per drill he ticked, capped at 1000 (`starting_points`),
@@ -287,8 +294,10 @@ static/training/js/deck.js   everything he sees and does on /deck/
 - **`clear_trial_plays` is the only thing that deletes a play**, and exists
   only so Phil's trial plays come off Will's record before the hand-over. It
   needs `--through DATE`, and `--confirm` needs `--expect N` matching the dry
-  run. It goes in leg 3. Back the disk up first, and clear the site data on
-  every phone the deck was tried on, or the phone sends them back.
+  run. Kept through the switch-over as a margin (3c); it is deleted in 3d.
+  Back the disk up first, and clear the site data on every phone the deck
+  was tried on, or the phone sends them back. Since 3c every play on his
+  account is his: never test by saving one there.
 - **Scores are read-only in the admin.** The phone's copy wins on the phone,
   so an admin correction would leave his bests showing the old number.
 
@@ -449,9 +458,10 @@ Service workers only register over **HTTPS or on localhost**. On a plain-http
 LAN address the app works but caches nothing. On Render it is HTTPS, so offline
 works there.
 
-`session.js`, `drill.js`, `deck.js` and `/deck/` are precached (see
+The deck at `/`, `deck.js`, `app.js`, Before the cards and the offline page
+are precached (see
 `_precache_urls`). Install-time precaching keeps only what passes `keep()`:
-`cache.add` follows a redirect and would store the login page under `/deck/`.
+`cache.add` follows a redirect and would store the login page under `/`.
 
 Bump `CACHE` in `training/templates/training/sw.js` when static assets change —
 filenames are not content-hashed.
