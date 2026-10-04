@@ -6,6 +6,7 @@ thing to re-read.
 """
 
 import json
+import logging
 from functools import wraps
 from datetime import date, timedelta
 
@@ -36,6 +37,8 @@ from .models import (
     TrainingPlan,
     get_athlete,
 )
+
+logger = logging.getLogger(__name__)
 
 # There is one profile, and Dad is the only other person who touches this, so
 # the coach screens sit behind the same PIN rather than a second account. They
@@ -224,7 +227,15 @@ def drill_complete(request, slug):
         log, _created = SessionLog.objects.update_or_create(
             athlete=athlete, date=day, drill=drill, defaults=defaults
         )
-        new_badges = progress.award_badges(athlete, day)
+        # A badge going wrong is logged, never a 500 and never a lost tick:
+        # since leg 3b the badges read his card plays too, so the deck's code
+        # runs here. The savepoint keeps the tick's transaction usable.
+        new_badges = []
+        try:
+            with transaction.atomic():
+                new_badges = progress.award_badges(athlete, day)
+        except Exception:
+            logger.exception("awarding badges failed; the tick is saved")
 
     record = None
     if reps and not drill.is_timed and (previous_best is None or reps > previous_best):

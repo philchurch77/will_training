@@ -24,6 +24,14 @@ The deck words come from `docs/chart/deck.md`.
 - **Personal best** - his best score on a card; for a per-foot card, per foot.
 - **Skill of the week** - the featured move worth double points (leg 2).
 - **Test week** - every fourth week, six self-tests (leg 2).
+- **Stamp** - the `points`, `medal` and `bests` worked out on the phone when a play is saved, stored on the play, and never worked out again. Null means an unstamped play, worth nothing.
+- **Locked / open** - a move level he cannot play until he has gold on the level below. Level 1 is always open.
+- **Sticker album** - the 8 moves x 3 levels grid at `#album`, empty and locked slots included.
+- **Test card** - the test-week button that opens the six self-tests (2b). Not a Card row.
+- **Goal week** - a Mon-Sun week with 3 deck sessions (2b).
+- **Legend** - the tag on a retired badge he earned and keeps (2b).
+- **Kept badge** - an old-app badge that carries on with the deck: First session, 10/50/100 drills, All rounder, Two footed, Keepy-up king. Counts ticks and card plays together (3b). `Badge.KEPT_KINDS`.
+- **Card-day** - one card played on one day, however many times. What a play counts as toward a kept badge, the same as one tick.
 - **Sync** - the phone sending plays it has not sent yet to `/api/plays/`, and downloading them back if it has lost its copy.
 
 ## The existing app

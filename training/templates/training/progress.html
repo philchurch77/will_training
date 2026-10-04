@@ -89,6 +89,7 @@
       <div class="badge {% if not row.earned %}locked{% endif %}">
         <div class="badge-em">{{ row.badge.emoji }}</div>
         <div class="badge-nm">{{ row.badge.name }}</div>
+        {% if row.legend %}<div class="badge-legend">Legend</div>{% endif %}
         <div class="muted" style="font-size:11px">
           {% if row.earned %}{{ row.earned_on|date:"j M" }}{% else %}{{ row.value }}/{{ row.badge.threshold }}{% endif %}
         </div>

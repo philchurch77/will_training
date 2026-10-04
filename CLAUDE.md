@@ -26,7 +26,7 @@ uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see b
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
 uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, before hand-over only
-uv run pytest                    # 357 tests, ~6 min
+uv run pytest                    # 474 tests, ~10 min (3 Today tests fail on Sundays)
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -177,7 +177,7 @@ Function-based views on purpose: one maintainer, re-read in a year.
 - **Test fixtures use `test-` prefixed slugs** so they compose with the
   `seeded` fixture, which creates the real drills.
 
-## The deck (leg 1 of `docs/chart/deck.md`, not on his tab bar yet)
+## The deck (legs 1-2b of `docs/chart/deck.md`, not on his tab bar yet)
 
 The deck of scored challenge cards is replacing the fixed plan, in three legs;
 read the chart and `CONTEXT.md` before touching it. Until leg 3 it sits
@@ -206,6 +206,71 @@ static/training/js/deck.js   everything he sees and does on /deck/
   the plays against it mean, so it is a new slug with the old one put in
   `RETIRED`. `api_plays` accepts plays on retired cards: the phone has no
   other copy to send.
+- **A play is stamped once, on the phone, when he saves it** (leg 2a):
+  `points`, `medal`, `bests` on `Play`, never worked out again. Totals, his
+  level and which move levels are open are sums and maxes of stamps, so a
+  change to points or medal targets never takes back what he earned. Null is
+  an unstamped play - from before 2a or an old cached page - and is worth
+  nothing. A bad stamp is dropped, never a reason to refuse the play: a real
+  score must not be lost over what it was worth. `restore()` fills a missing
+  stamp from the server, nulls only.
+- **Every game number lives in `deck_rules.py`** and reaches the phone as the
+  `deck-rules` block; `deck.js` keeps none of its own beyond the game's shape
+  (three medals, three levels per move). **Level thresholds may go down,
+  never up** - raising one takes a level off him, and `test_deck_rules.py`
+  holds the ceilings. The skill of the week starts on `BLOCKS_START` and is
+  None before it, so nothing is stamped double early.
+- **A card's slug, move and level never change** - only retired, like drills.
+  Unlocks look up the gate card by move and level and read its stamped
+  medals by slug, so moving either re-locks a level he opened.
+  `FROZEN_MEANINGS` in `test_deck.py` holds them.
+- **Gold on a move level opens the next.** A locked card is never dealt and
+  cannot be played; it shows "Locked" and what opens it. The Moves card in his
+  hand is always the skill of the week at its highest open level.
+- **The deck's badges are awarded at sync, on the server, from his plays**
+  (leg 2b): `deck_rules.deck_badge_values` over every Play row, retired cards
+  included, and `award_deck_badges` when a POST saves a new play. They never
+  go through `progress.award_badges`, and the old Progress page never shows
+  them - `Badge.DECK_KINDS` keeps the two apart until leg 3. Gold medal and
+  Record breaker trust the phone's stamps; `_parse_stamp` holds the checks
+  that stay true whatever the targets become. Already earned stays earned.
+- **The kept old badges count ticks and card plays together** (leg 3b):
+  First session, 10/50/100 drills, All rounder, Two footed, Keepy-up king -
+  `Badge.KEPT_KINDS`. `progress.kept_badge_values` is the one place that adds
+  them up, and both a tick on Today (`award_badges`) and a deck sync
+  (`award_deck_badges`) award from it, each award in its own savepoint so a
+  race between the two never rolls back a tick - `progress.award` is the one
+  award step for both. One go on a card is a
+  *card-day* (`deck_rules.kept_counts_from_plays`): a different card on a day, free play
+  included, never the score. All rounder is the larger of skills tried and
+  packs played, never the sum. The deck's Badges screen shows every deck and
+  kept badge plus anything else he earned; old Progress still hides the deck
+  kinds until 3c.
+- **A deck session is 3 different cards on one day, free play included; a
+  goal week is 3 sessions Mon-Sun.** This is the one rule written twice -
+  `deck_rules.session_dates` and `weekStatus` in `deck.js`. Change both. The
+  current week never breaks a run; weeks in a row is shown only from 1.
+- **A badge is retired, never deleted.** `EarnedBadge.badge` is CASCADE, so
+  both badge admins refuse delete. `RETIRED_BADGES` in `seed_drills.py` is an
+  explicit list (empty until leg 3); a retired badge is never awarded again,
+  and one he earned shows tagged Legend. `clear_trial_plays` is the only
+  thing that removes an award: it deletes every active deck badge (Legends
+  are kept) and re-awards from the plays left. Its delete stays bounded by
+  `DECK_KINDS` - **never widen it to the kept badges**: they were earned from
+  real ticks, a re-award rewrites every date, and one whose count fell since
+  would not come back. Run it before 3b reaches Render.
+- **His old app gives him a head start** (leg 3a), worked out from his
+  SessionLog rows on every deck load by `deck_rules.history_for` and written
+  nowhere: 5 points per drill he ticked, capped at 1000 (`starting_points`),
+  and his old best on the three drills that are the same exercise as a card
+  (`HISTORY_CARDS`, `starting_bests`). Per user - `request.user`, never
+  `get_athlete()`. Once he has seen it, the per-tick figure and the cap may
+  go up, never down. No medals come from old scores: no old move drill was
+  ever scored, so no level opens from history. Because it is live, unticking
+  on Today or editing a count on His sessions moves it; stamps never change.
+- **`will-deck-server-v1`** caches what only the server knows - every badge
+  he has earned (only ever added), the goal-week run to last week, and badges not
+  yet celebrated. It is not the plays list, and nothing in it is a record.
 - **The hand** is five cards from five packs: always one Moves card and one
   Quick feet or Combos card. It is the same all day until he deals again.
   Free play is a button, not a card in the hand.

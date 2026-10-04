@@ -74,3 +74,17 @@ Side effect worth knowing: once Will has one Play, deleting his user raises
 `ProtectedError` before anything is collected, which also shields his
 SessionLogs. `CardAdmin` and `PlayAdmin` carry `NoDeleteMixin`; `PlayAdmin`
 leaves `score`/`weak_score` editable (deliberate? not yet stated).
+
+**Admin re-checked 2026-10-04 (leg 2b):** `BadgeAdmin` and `EarnedBadgeAdmin`
+now carry `NoDeleteMixin` (closes the Badge->EarnedBadge cascade in the
+admin). Still deletable in admin: `SessionLogAdmin` (his history, bulk action)
+and the stock auth `User` admin (EarnedBadge/SessionLog/SessionClock CASCADE;
+blocked by Play PROTECT only once he has a play). No test asserts the new
+Badge/EarnedBadge guards (test_admin.py covers Skill/Drill only).
+Only code path that deletes an EarnedBadge: `clear_trial_plays` (deck kinds,
+active badges only, all athletes, then re-awards in the same atomic block).
+
+**Nuance found 2026-10-04 (leg 3b):** the Play PROTECT shield on Will's user
+only exists while he has a Play. `clear_trial_plays` with a --through covering
+every play leaves him with none, so the stock User admin delete would again
+cascade SessionLog/SessionClock/EarnedBadge until his first real card.

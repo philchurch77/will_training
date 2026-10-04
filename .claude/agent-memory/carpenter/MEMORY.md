@@ -1,2 +1,5 @@
 - [Seed data review conventions](seed_data_review_notes.md) — how to check seed_drills.py/CLAUDE.md/test_seed.py together, and drift already flagged once.
-- [Deck review notes](deck_review_notes.md) — deck.js/deck_views.py layout, deliberate choices, findings flagged in leg 1.
+- [Deck leg 2b notes](deck_leg2b_notes.md) — badges/goal weeks: where logic lives, what was verified, what was flagged.
+- [Deck leg 3a notes](deck_leg3a_notes.md) — head start (starting points/bests): where it lives, verified, flagged.
+- [Deck leg 3b notes](deck_leg3b_notes.md) — kept badges: kept_badge_values home, import chain, verified, flagged.
+- [Deck review notes](deck_review_notes.md) — deck.js/deck_views.py/deck_rules.py layout, deliberate choices, findings flagged in legs 1 and 2a.

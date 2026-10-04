@@ -18,6 +18,8 @@
   <div class="card"><p>The cards need JavaScript switched on.</p></div>
 </noscript>
 {{ cards|json_script:"deck-cards" }}
+{{ rules|json_script:"deck-rules" }}
+{{ deck_badges|json_script:"deck-badges" }}
 {% endblock %}
 
 {% block scripts %}

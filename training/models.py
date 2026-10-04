@@ -373,6 +373,17 @@ class Badge(models.Model):
     WEAK_FOOT = "weak_foot"
     JUGGLING = "juggling"
     PERFECT_WEEKS = "perfect_weeks"
+    # The deck's badges (leg 2b). Worked out on the server from Play rows by
+    # deck_rules.deck_badge_values and awarded at sync - never by
+    # progress.award_badges, and never shown on the old Progress page.
+    # DECK_KINDS also bounds clear_trial_plays: only these are ever cleared.
+    GOAL_WEEKS_RUN = "goal_weeks_run"
+    GOAL_WEEKS_TOTAL = "goal_weeks_total"
+    MOVE_GOLDS = "move_golds"
+    PERSONAL_BESTS = "personal_bests"
+    TEST_WEEKS = "test_weeks"
+    WEAK_FOOT_CLOSER = "weak_foot_closer"
+    FREE_PLAYS = "free_plays"
     KIND_CHOICES = [
         (STREAK, "Day streak"),
         (TOTAL_DRILLS, "Drills completed"),
@@ -381,7 +392,23 @@ class Badge(models.Model):
         (WEAK_FOOT, "Weak foot drills"),
         (JUGGLING, "Juggling drills"),
         (PERFECT_WEEKS, "Perfect weeks"),
+        (GOAL_WEEKS_RUN, "Goal weeks in a row"),
+        (GOAL_WEEKS_TOTAL, "Goal weeks in total"),
+        (MOVE_GOLDS, "Move golds"),
+        (PERSONAL_BESTS, "Personal bests"),
+        (TEST_WEEKS, "Test weeks done"),
+        (WEAK_FOOT_CLOSER, "Weak foot closer"),
+        (FREE_PLAYS, "Free play"),
     ]
+    DECK_KINDS = frozenset({
+        GOAL_WEEKS_RUN, GOAL_WEEKS_TOTAL, MOVE_GOLDS, PERSONAL_BESTS,
+        TEST_WEEKS, WEAK_FOOT_CLOSER, FREE_PLAYS,
+    })
+    # The old badges kept through the switch-over (leg 3b). They count old
+    # ticks and card plays together - progress.kept_badge_values is the one
+    # place that adds them up - and both a tick on Today and a deck sync award
+    # them. Never cleared by clear_trial_plays: he earned them from real ticks.
+    KEPT_KINDS = frozenset({TOTAL_DRILLS, SKILLS_TRIED, WEAK_FOOT, JUGGLING})
 
     code = models.SlugField(max_length=40, unique=True)
     name = models.CharField(max_length=40)
@@ -390,6 +417,11 @@ class Badge(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     threshold = models.PositiveIntegerField()
     order = models.PositiveSmallIntegerField(default=0)
+    # A badge is retired, never deleted: EarnedBadge.badge is CASCADE, so a
+    # delete takes his award with it. A retired badge is never awarded again,
+    # and one he already earned stays on his record tagged Legend. Set from
+    # RETIRED_BADGES in seed_drills.py.
+    is_active = models.BooleanField(default=True)
 
     class Meta:
         ordering = ["order", "threshold"]
@@ -535,6 +567,19 @@ class Play(models.Model):
     # For a per-foot card, score is the strong foot and weak_score the weak.
     score = models.PositiveIntegerField(null=True, blank=True)
     weak_score = models.PositiveIntegerField(null=True, blank=True)
+
+    # The stamp: what this play was worth in the game, worked out once on the
+    # phone when he saved it and never again (deck_rules.py has the numbers).
+    # Totals, levels and unlocks add these up, so a later change to points or
+    # medal targets can never take back what he earned. Null is a play saved
+    # before the game layer, or by an old cached page, and is worth nothing.
+    NO_MEDAL, BRONZE, SILVER, GOLD = 0, 1, 2, 3
+    MEDAL_CHOICES = [(NO_MEDAL, "None"), (BRONZE, "Bronze"), (SILVER, "Silver"), (GOLD, "Gold")]
+    points = models.PositiveSmallIntegerField(null=True, blank=True)
+    medal = models.PositiveSmallIntegerField(null=True, blank=True, choices=MEDAL_CHOICES)
+    bests = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Feet that beat his best (0-2); a first score is not one."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -7,11 +7,13 @@ month ends and rest days is provable.
 
 from datetime import timedelta
 
+from django.db import IntegrityError, transaction
 from django.db.models import Max
 
 
 from django.db.models import Q
 
+from . import deck_rules
 from .models import (
     Badge,
     Drill,
@@ -336,18 +338,25 @@ def minutes_by_skill(athlete, since=None):
 
 
 def badge_progress(athlete, today):
-    """Every badge, annotated with whether it is earned and how close he is."""
+    """Every badge, annotated with whether it is earned and how close he is.
+
+    The deck's badges are left out: they live on the deck until the
+    switch-over. A retired badge shows only if he earned it, tagged Legend.
+    """
     earned = {
         eb.badge_id: eb for eb in EarnedBadge.objects.filter(athlete=athlete)
     }
     values = _badge_values(athlete, today)
 
     rows = []
-    for badge in Badge.objects.all():
+    for badge in Badge.objects.exclude(kind__in=Badge.DECK_KINDS):
+        if not badge.is_active and badge.id not in earned:
+            continue
         value = values.get(badge.kind, 0)
         rows.append(
             {
                 "badge": badge,
+                "legend": not badge.is_active,
                 "earned": badge.id in earned,
                 "earned_on": earned[badge.id].earned_on if badge.id in earned else None,
                 "value": value,
@@ -359,16 +368,33 @@ def badge_progress(athlete, today):
     return rows
 
 
+def kept_badge_values(athlete, rows=None):
+    """The kept old badges' values: old ticks and card plays added together.
+
+    The one place that knows the rule (leg 3b), read by a tick on Today and by
+    a deck sync alike, so the two can never disagree. A card-day counts as one
+    tick (deck_rules.kept_counts_from_plays). All rounder takes the larger of skills
+    tried and packs played, never the sum: they are two lists of the same
+    idea. `rows` saves reading his plays twice when the caller has them.
+    """
+    if rows is None:
+        rows = deck_rules.deck_rows(athlete)
+    plays = deck_rules.kept_counts_from_plays(rows)
+    return {
+        Badge.TOTAL_DRILLS: drills_completed(athlete) + plays[Badge.TOTAL_DRILLS],
+        Badge.SKILLS_TRIED: max(skills_tried(athlete), plays[Badge.SKILLS_TRIED]),
+        Badge.WEAK_FOOT: weak_foot_sessions(athlete) + plays[Badge.WEAK_FOOT],
+        Badge.JUGGLING: juggling_sessions(athlete) + plays[Badge.JUGGLING],
+    }
+
+
 def _badge_values(athlete, today):
     """Current value of each badge metric."""
     return {
         Badge.STREAK: current_streak(athlete, today),
-        Badge.TOTAL_DRILLS: drills_completed(athlete),
-        Badge.SKILLS_TRIED: skills_tried(athlete),
         Badge.TOTAL_MINUTES: total_minutes(athlete),
-        Badge.WEAK_FOOT: weak_foot_sessions(athlete),
-        Badge.JUGGLING: juggling_sessions(athlete),
         Badge.PERFECT_WEEKS: perfect_weeks(athlete, today),
+        **kept_badge_values(athlete),
     }
 
 
@@ -377,19 +403,37 @@ def award_badges(athlete, today):
 
     Returns the list of badges earned by this call, so the Today screen can pop
     a celebration card. Existing awards are never duplicated or revoked.
+
+    Never a deck badge - those are worked out from his plays, at sync, by
+    deck_rules.award_deck_badges.
     """
-    values = _badge_values(athlete, today)
+    old_kinds = {kind for kind, _ in Badge.KIND_CHOICES} - Badge.DECK_KINDS
+    return award(athlete, _badge_values(athlete, today), old_kinds, today)
+
+
+def award(athlete, values, kinds, today):
+    """Award every active badge of `kinds` whose value has reached its
+    threshold and that he does not hold yet. Returns the badges awarded now.
+
+    The one award step, for a tick on Today and a deck sync alike. Never
+    deletes or revokes, and never a retired badge. Each award is made in its
+    own savepoint, so two paths racing to the same badge leave one row and
+    no error - the unique constraint decides, never a get(). Without it, the
+    race would roll back the tick that drill_complete's transaction holds.
+    """
     already = set(
         EarnedBadge.objects.filter(athlete=athlete).values_list("badge_id", flat=True)
     )
-
     newly = []
-    for badge in Badge.objects.all():
-        if badge.id in already:
+    for badge in Badge.objects.filter(is_active=True, kind__in=kinds):
+        if badge.id in already or values.get(badge.kind, 0) < badge.threshold:
             continue
-        if values.get(badge.kind, 0) >= badge.threshold:
-            EarnedBadge.objects.create(athlete=athlete, badge=badge, earned_on=today)
-            newly.append(badge)
+        try:
+            with transaction.atomic():
+                EarnedBadge.objects.create(athlete=athlete, badge=badge, earned_on=today)
+        except IntegrityError:
+            continue
+        newly.append(badge)
     return newly
 
 

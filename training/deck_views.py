@@ -9,6 +9,7 @@ Function-based like views.py, for the same reason.
 """
 
 import json
+import logging
 import uuid
 from datetime import datetime, timedelta
 from functools import wraps
@@ -20,7 +21,8 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .models import Card, Play
+from .deck_rules import award_deck_badges, goal_weeks_for, history_for, rules_json
+from .models import Badge, Card, EarnedBadge, Play
 
 # A phone left in a drawer for a month still holds plays worth keeping, so the
 # window is generous. It exists to stop a wrong phone clock writing a date
@@ -33,6 +35,12 @@ MAX_SCORE = 100_000
 # Plays per sync. The phone sends everything it has not sent yet; this is a
 # ceiling on one request, and the phone simply sends the rest next time.
 MAX_BATCH = 500
+
+logger = logging.getLogger(__name__)
+
+# Upper bounds for a play's stamp. Points top out near 110 under today's rules
+# and a medal is 0-3, bests 0-2 (one per foot).
+STAMP_CEILINGS = {"points": 1000, "medal": Play.GOLD, "bests": 2}
 
 
 def api_login_required(view):
@@ -67,7 +75,16 @@ def deck(request):
     page loads with signal.
     """
     cards = [_card_json(card) for card in Card.objects.active()]
-    return render(request, "training/deck.html", {"cards": cards, "tab": "deck"})
+    return render(
+        request,
+        "training/deck.html",
+        {
+            "cards": cards,
+            "rules": rules_json(timezone.localdate(), history_for(request.user)),
+            "deck_badges": _deck_badges_json(request.user),
+            "tab": "deck",
+        },
+    )
 
 
 @api_login_required
@@ -80,9 +97,14 @@ def api_plays(request):
     lot sent. A refused play stays on the phone; nothing here can make the
     phone throw one away.
     """
+    today = timezone.localdate()
     if request.method == "GET":
         plays = Play.objects.filter(athlete=request.user).select_related("card")
-        return _no_store(JsonResponse({"plays": [_play_json(play) for play in plays]}))
+        return _no_store(JsonResponse({
+            "plays": [_play_json(play) for play in plays],
+            "earned": _earned_codes(request.user),
+            "goal_weeks": goal_weeks_for(request.user, today),
+        }))
 
     try:
         incoming = json.loads(request.body or b"{}").get("plays", [])
@@ -102,6 +124,7 @@ def api_plays(request):
         ).values_list("pk", "athlete_id")
     )
     saved, refused = [], []
+
     for raw, play, reason in parsed:
         if play is None:
             refused.append({"id": _safe_id(raw), "reason": reason})
@@ -117,6 +140,7 @@ def api_plays(request):
         try:
             with transaction.atomic():
                 play.save(force_insert=True)
+
         except IntegrityError:
             # Two syncs racing with the same play: the other one saved it.
             # Only call it saved if a copy is really there and it is his:
@@ -129,7 +153,24 @@ def api_plays(request):
         owners[play.pk] = request.user.pk
         saved.append(str(play.pk))
 
-    return _no_store(JsonResponse({"saved": saved, "refused": refused}))
+    # Checked on every sync that holds his plays, not only when one is new:
+    # a retry after a lost answer, or a badge added or lowered at deploy, would
+    # otherwise wait for his next play. Awarded after the plays are saved, and
+    # a badge going wrong is logged, never a 500: it must not cost a play.
+    new_badges = []
+    if saved:
+        try:
+            with transaction.atomic():
+                new_badges = [badge.code for badge in award_deck_badges(request.user, today)]
+        except Exception:
+            logger.exception("awarding deck badges failed; the plays are saved")
+
+    return _no_store(JsonResponse({
+        "saved": saved,
+        "refused": refused,
+        "badges": new_badges,
+        "goal_weeks": goal_weeks_for(request.user, today),
+    }))
 
 
 # --- helpers --------------------------------------------------------------
@@ -177,7 +218,81 @@ def _play_json(play):
         "played_at": play.played_at.isoformat(),
         "score": play.score,
         "weak_score": play.weak_score,
+        "points": play.points,
+        "medal": play.medal,
+        "bests": play.bests,
     }
+
+
+def _deck_badges_json(athlete):
+    """The deck's badge screen, every badge he has in one place (leg 3b):
+    each active deck or kept badge, earned or not, and any other badge he
+    earned - an old streak, or a retired one tagged Legend. An old badge he
+    has not earned is left out: the deck cannot award it, so "Not yet" would
+    be a promise it cannot keep. Only his own awards."""
+    earned = set(
+        EarnedBadge.objects.filter(athlete=athlete).values_list("badge_id", flat=True)
+    )
+    on_deck = Badge.DECK_KINDS | Badge.KEPT_KINDS
+    return [
+        {
+            "code": badge.code,
+            "name": badge.name,
+            "emoji": badge.emoji,
+            "description": badge.description,
+            "legend": not badge.is_active,
+            "earned": badge.id in earned,
+        }
+        for badge in Badge.objects.all()
+        if badge.id in earned or (badge.is_active and badge.kind in on_deck)
+    ]
+
+
+def _earned_codes(athlete):
+    """Every badge he has, so the phone's cache knows them as earned rather
+    than news - one won on Today is not celebrated again on the deck."""
+    return list(
+        EarnedBadge.objects.filter(athlete=athlete).values_list("badge__code", flat=True)
+    )
+
+
+def _parse_stamp(raw, scores, card):
+    """The play's stamp, or no stamp at all - never a reason to refuse it.
+
+    Optional: a play from before the game layer, or from an old cached page,
+    has none and is stored as worth nothing. Anything odd - out of range, not
+    a whole number, a medal with no score - drops all three fields and keeps
+    the play. A refused play sits on the phone unsent, and a real score must
+    never be lost over what it was worth in the game.
+
+    Never checked against today's targets or points: change one and every
+    older stamp would fail. The ceilings are loose for the same reason.
+    """
+    none = {field: None for field in STAMP_CEILINGS}
+    stamp = {}
+    for field, ceiling in STAMP_CEILINGS.items():
+        value = raw.get(field)
+        if value is None:
+            stamp[field] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= ceiling:
+            return none
+        stamp[field] = value
+    # Cross-checks that stay true whatever the targets become. The Gold medal
+    # and Record breaker badges trust these stamps (docs/chart/deck.md, leg
+    # 2b), so a stamp the card could never have earned is dropped.
+    medal, bests = stamp.get("medal") or 0, stamp.get("bests") or 0
+    if card.scoring == Card.NONE and (medal or bests):
+        return none
+    # No target ever gives a medal for 0, and a time of 0 never counts.
+    if medal and not scores.get("score"):
+        return none
+    if card.per_foot and medal and not scores.get("weak_score"):
+        return none
+    feet = (scores.get("score") is not None) + (card.per_foot and scores.get("weak_score") is not None)
+    if bests > feet:
+        return none
+    return stamp
 
 
 def _safe_id(raw):
@@ -242,6 +357,8 @@ def _parse_play(raw, athlete, cards):
         if not 0 <= value <= MAX_SCORE:
             return None, f"{field} out of range"
         scores[field] = value
+
+    scores.update(_parse_stamp(raw, scores, card))
 
     return (
         Play(
