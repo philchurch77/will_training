@@ -143,16 +143,15 @@ def rules_json(today, history=None):
 
 # --- the head start: his old app's history ----------------------------------
 # Worked out from his SessionLog rows every time the deck loads and written
-# nowhere, so it cannot be got wrong and days he trains on Today before the
-# switch-over still count. See docs/chart/deck.md, "Leg 3 decisions".
+# nowhere, so it cannot be got wrong. Since leg 3d nothing adds or removes a
+# SessionLog (the tick endpoints are gone and the admin refuses both), so the
+# points are fixed. See docs/chart/deck.md, "Leg 3 decisions".
 
 # Points per old drill he ticked, and the most the old app can give him. Once
 # he has seen his head start these may go up, never down: lowering either
-# could take a level off him. Unticking a drill on Today (drill_uncomplete
-# deletes the row) lowers it by 5 below the cap - a same-day undo of his own,
-# accepted, and gone when 3d retires the tick endpoints. The same goes for
-# his inherited best: a count edited on Coach -> His sessions, or unticked,
-# moves the number shown on the card. Stamps already made never change.
+# could take a level off him. A count edited on the Coach screen moves
+# only his inherited best on the three cards below, never the points.
+# Stamps already made never change.
 STARTING_POINTS_PER_TICK = 5
 STARTING_POINTS_CAP = 1000
 
@@ -350,14 +349,120 @@ def goal_weeks_for(athlete, today):
     return goal_weeks_json(goal_mondays(session_dates(deck_rows(athlete))), today)
 
 
+# --- the coach page (leg 4) -------------------------------------------------
+# Read-only sums and maxes of what the phone stamped, so the coach page and
+# the phone agree. The player level is the second rule written twice - here
+# and levelFor in deck.js; both read LEVELS. Change both.
+
+
+def player_level(points):
+    """The name of the level a points total has reached."""
+    name = LEVELS[0][0]
+    for level, threshold in LEVELS:
+        if points >= threshold:
+            name = level
+    return name
+
+
+def coach_summary(athlete, today):
+    """His total, level and goal weeks as the server knows them: what has
+    backed up. Four queries, whatever the size of his record."""
+    from django.db.models import Sum
+
+    from .models import Play
+
+    history = history_for(athlete)
+    stamped = Play.objects.filter(athlete=athlete).aggregate(total=Sum("points"))["total"]
+    points = (stamped or 0) + history["points"]
+    dates = session_dates(deck_rows(athlete))
+    mondays = goal_mondays(dates)
+    monday = monday_of(today)
+    return {
+        "points": points,
+        "head_start": history["points"],
+        "level": player_level(points),
+        "sessions_this_week": sum(
+            1 for day in dates if monday <= day < monday + timedelta(weeks=1)
+        ),
+        "goal_sessions": GOAL_SESSIONS,
+        "goal_run": goal_weeks_run(mondays, today),
+        "goal_total": len(mondays),
+        "starting_bests": history["bests"],
+    }
+
+
+def card_bests(athlete, starting=None):
+    """His best on every scored card he has played, retired cards included -
+    one query. Per foot, by the phone's rule: on a time card the fastest
+    above 0, otherwise the highest. `starting` is history_for's bests: an old
+    best he has not beaten on the card is shown, flagged from_before."""
+    from django.db.models import Count, Max, Min, Q
+
+    from .models import Card, Play
+
+    starting = starting or {}
+    rows = (
+        Play.objects.filter(athlete=athlete)
+        .exclude(card__scoring=Card.NONE)
+        .values(
+            "card__slug", "card__name", "card__pack", "card__scoring",
+            "card__per_foot", "card__order",
+        )
+        .annotate(
+            plays=Count("id"),
+            high=Max("score"),
+            high_weak=Max("weak_score"),
+            low=Min("score", filter=Q(score__gt=0)),
+            low_weak=Min("weak_score", filter=Q(weak_score__gt=0)),
+            medal=Max("medal"),
+        )
+        .order_by("card__order", "card__name")
+    )
+    bests = []
+    for row in rows:
+        timed = row["card__scoring"] == Card.TIME
+        best = row["low"] if timed else row["high"]
+        weak = row["low_weak"] if timed else row["high_weak"]
+        start = starting.get(row["card__slug"])
+        from_before = bool(start) and (best is None or best <= start["score"])
+        bests.append({
+            "slug": row["card__slug"],
+            "name": row["card__name"],
+            "pack": dict(Card.PACK_CHOICES).get(row["card__pack"], row["card__pack"]),
+            "scoring": row["card__scoring"],
+            "per_foot": row["card__per_foot"],
+            "plays": row["plays"],
+            "best": start["score"] if from_before else best,
+            "weak": weak,
+            "from_before": from_before,
+            "medal": row["medal"] or 0,
+        })
+    # An old best on a card he has not played on the deck yet: his phone
+    # shows it to beat, so the coach page does too. One more query.
+    unplayed = set(starting) - {row["slug"] for row in bests}
+    for card in Card.objects.filter(slug__in=unplayed).order_by("order", "name"):
+        bests.append({
+            "slug": card.slug,
+            "name": card.name,
+            "pack": card.get_pack_display(),
+            "scoring": card.scoring,
+            "per_foot": card.per_foot,
+            "plays": 0,
+            "best": starting[card.slug]["score"],
+            "weak": None,
+            "from_before": True,
+            "medal": 0,
+        })
+    return bests
+
+
 def award_deck_badges(athlete, today):
     """Award any deck badge, or kept old badge, newly earned. Returns the
     badges awarded now.
 
     The kept badges count old ticks and card plays together, through
-    progress.kept_badge_values - the same numbers a tick on Today awards
-    them from, so the two paths cannot disagree. Never deletes or revokes;
-    progress.award is the one award step, savepoint and all.
+    progress.kept_badge_values. Never deletes or revokes; progress.award is
+    the one award step, savepoint and all.
     """
     from .models import Badge
     # Lazy: progress imports this module at the top, so the reverse import

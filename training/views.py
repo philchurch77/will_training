@@ -6,60 +6,44 @@ thing to re-read.
 """
 
 import json
-import logging
 from functools import wraps
-from datetime import date, timedelta
 
 from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
-from django.db.models import Q
-from django.http import HttpResponse, JsonResponse
+from django.core.paginator import Paginator
+from django.http import HttpResponse
+from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
-from . import progress, throttle
-from .forms import DrillForm, PlanDayForm
-from .models import (
-    WEEKDAYS,
-    Drill,
-    PlanDay,
-    PlanDrill,
-    SessionLog,
-    Skill,
-    TrainingPlan,
-    get_athlete,
-)
+from . import deck_rules, progress, throttle
+from .models import Play, SessionLog, get_athlete
 
-logger = logging.getLogger(__name__)
+# The coach screens read Will's record through get_athlete() (one profile).
+# Dad reads them signed in as staff (leg 4): signed out, they send him to the
+# staff sign-in, never to Will's PIN pad - a PIN session on Dad's phone could
+# sync that phone's plays onto Will for good.
+COACH_SIGN_IN = "/admin/login/"
 
-# There is one profile, and Dad is the only other person who touches this, so
-# the coach screens sit behind the same PIN rather than a second account. They
-# are simply kept off Will's tab bar.
+
 def coach_required(view):
-    """Coach screens: same session, flagged so the chrome can adapt."""
+    """Coach screens: signed in, flagged so the chrome can adapt."""
 
     @wraps(view)
-    @login_required
+    @login_required(login_url=COACH_SIGN_IN)
     def wrapped(request, *args, **kwargs):
         request.in_coach = True
         return view(request, *args, **kwargs)
 
     return wrapped
-
-
-def _today():
-    """Today's date in the app's timezone."""
-    from django.utils import timezone
-
-    return timezone.localdate()
 
 
 # --- Auth -----------------------------------------------------------------
@@ -108,8 +92,8 @@ def login_view(request):
 def _safe_next(request):
     """Where to go after the PIN, if the address asked for somewhere on this site.
 
-    The deck's "Sign in to back it up" sends him back to the cards rather than
-    Today. Anything off-site is ignored, so the pad can never be used to bounce
+    The deck's "Sign in to back it up" sends him back to the cards. Anything
+    off-site is ignored, so the pad can never be used to bounce
     someone to another address.
     """
     target = request.GET.get("next", "")
@@ -120,187 +104,21 @@ def _safe_next(request):
     return None
 
 
+@require_POST
 def logout_view(request):
+    """POST only: a link or a prefetch must never sign him out.
+
+    Signing out of the coach screens goes back to the staff sign-in, not to
+    Will's PIN pad.
+    """
+    from_coach = request.POST.get("from") == "coach"
     auth_logout(request)
+    if from_coach:
+        return redirect(f"{COACH_SIGN_IN}?next={reverse('training:coach_cards')}")
     return redirect("training:login")
 
 
 # --- Child screens --------------------------------------------------------
-
-
-@login_required
-def today(request):
-    athlete = request.user
-    day = _today()
-
-    summary = progress.today_summary(athlete, day)
-    just_done = request.GET.get("done")
-    new_badges = request.session.pop("new_badges", [])
-    new_record = request.session.pop("new_record", None)
-
-    return render(
-        request,
-        "training/today.html",
-        {
-            "summary": summary,
-            "today": day,
-            "streak": progress.current_streak(athlete, day),
-            "just_done": just_done,
-            "new_badges": new_badges,
-            "new_record": new_record,
-            "tab": "today",
-        },
-    )
-
-
-@login_required
-def drill_detail(request, slug):
-    drill = get_object_or_404(Drill.objects.select_related("skill"), slug=slug)
-    athlete = request.user
-    day = _today()
-
-    already = SessionLog.objects.filter(
-        athlete=athlete, date=day, drill=drill, completed=True
-    ).exists()
-
-    return render(
-        request,
-        "training/drill.html",
-        {
-            "drill": drill,
-            "already_done": already,
-            "best": progress.personal_best(athlete, drill),
-            "tab": "today",
-        },
-    )
-
-
-@login_required
-@require_POST
-def drill_complete(request, slug):
-    """Mark a drill done for today.
-
-    Idempotent by design: the unique constraint on (athlete, date, drill)
-    means replaying a completion that was queued offline updates the existing
-    row instead of creating a duplicate.
-    """
-    drill = get_object_or_404(Drill, slug=slug)
-    athlete = request.user
-
-    day = _parse_date(request.POST.get("date")) or _today()
-    rating = _parse_int(request.POST.get("rating"), lo=1, hi=5)
-    minutes = _parse_int(request.POST.get("actual_minutes"), lo=0, hi=600)
-    reps = _parse_int(request.POST.get("actual_reps"), lo=0, hi=10000)
-
-    # Read the old best before the tick overwrites today's row - and count
-    # anything already logged today, or ticking the same number twice would
-    # claim a second record.
-    previous_best = max(
-        progress.personal_best(athlete, drill, before=day) or 0,
-        SessionLog.objects.filter(athlete=athlete, date=day, drill=drill)
-        .values_list("actual_reps", flat=True)
-        .first() or 0,
-    ) or None
-
-    with transaction.atomic():
-        # Every tick carries the session clock with it, so the time is banked
-        # even if he never taps Finish.
-        progress.record_session_seconds(
-            athlete, day, request.POST.get("session_seconds")
-        )
-        # Only write what this request actually carried. The tick on the
-        # Today list posts no count and no rating, and it must not wipe the 30
-        # he counted on the drill page ten minutes earlier - which is the
-        # number his record is made of.
-        defaults = {"completed": True}
-        if rating is not None:
-            defaults["rating"] = rating
-        if drill.is_timed:
-            defaults["actual_reps"] = None
-            if minutes is not None:
-                defaults["actual_minutes"] = minutes
-        else:
-            defaults["actual_minutes"] = None
-            if reps is not None:
-                defaults["actual_reps"] = reps
-
-        log, _created = SessionLog.objects.update_or_create(
-            athlete=athlete, date=day, drill=drill, defaults=defaults
-        )
-        # A badge going wrong is logged, never a 500 and never a lost tick:
-        # since leg 3b the badges read his card plays too, so the deck's code
-        # runs here. The savepoint keeps the tick's transaction usable.
-        new_badges = []
-        try:
-            with transaction.atomic():
-                new_badges = progress.award_badges(athlete, day)
-        except Exception:
-            logger.exception("awarding badges failed; the tick is saved")
-
-    record = None
-    if reps and not drill.is_timed and (previous_best is None or reps > previous_best):
-        record = {"drill": drill.name, "reps": reps, "previous": previous_best}
-
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JsonResponse(
-            {
-                "ok": True,
-                "drill": drill.slug,
-                "badges": [
-                    {"name": b.name, "emoji": b.emoji, "description": b.description}
-                    for b in new_badges
-                ],
-                "record": record,
-            }
-        )
-
-    if record:
-        request.session["new_record"] = record
-    if new_badges:
-        request.session["new_badges"] = [
-            {"name": b.name, "emoji": b.emoji, "description": b.description}
-            for b in new_badges
-        ]
-    return redirect(f"{reverse('training:today')}?done={drill.slug}")
-
-
-@login_required
-@require_POST
-def drill_uncomplete(request, slug):
-    """Untick a drill - he tapped it by accident."""
-    drill = get_object_or_404(Drill, slug=slug)
-    athlete = request.user
-    SessionLog.objects.filter(athlete=athlete, date=_today(), drill=drill).delete()
-    return redirect("training:today")
-
-
-@login_required
-@require_POST
-def session_time(request):
-    """Bank the session clock.
-
-    Three things post here: the Finish button, a best-effort save when he
-    pauses, and the by-hand entry for the evening he forgets to start it at
-    all. Separate from ticking a drill because he might train for twenty
-    minutes on the one drill he is enjoying and tick nothing until the end.
-    """
-    day = _parse_date(request.POST.get("date")) or _today()
-
-    # Minutes mean he set it by hand because he forgot to start the clock, so
-    # that figure replaces whatever the phone thinks - downwards included.
-    minutes = _parse_int(request.POST.get("minutes"), lo=1, hi=180)
-    if minutes is not None:
-        clock = progress.record_session_seconds(
-            request.user, day, minutes * 60, exact=True
-        )
-    else:
-        clock = progress.record_session_seconds(
-            request.user, day, request.POST.get("seconds")
-        )
-
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JsonResponse({"ok": True, "seconds": clock.seconds if clock else 0})
-    return redirect("training:today")
 
 
 @login_required
@@ -327,177 +145,7 @@ def before_cards(request):
     )
 
 
-@login_required
-def library(request, slug=None):
-    skills = Skill.objects.all()
-    selected = None
-    drills = Drill.objects.active().select_related("skill")
-    if slug:
-        selected = get_object_or_404(Skill, slug=slug)
-        drills = drills.filter(skill=selected)
-
-    return render(
-        request,
-        "training/library.html",
-        {"skills": skills, "selected": selected, "drills": drills, "tab": "library"},
-    )
-
-
 # --- Coach screens --------------------------------------------------------
-
-
-@coach_required
-def coach_plan(request):
-    plan = TrainingPlan.get_active()
-    rows = []
-    if plan:
-        for day in plan.days.prefetch_related("items__drill__skill").order_by("weekday"):
-            rows.append(
-                {
-                    "day": day,
-                    "week_a": len(day.drills_for_week(PlanDrill.WEEK_A)),
-                    "week_b": len(day.drills_for_week(PlanDrill.WEEK_B)),
-                }
-            )
-    return render(
-        request,
-        "training/coach/plan.html",
-        {
-            "plan": plan,
-            "rows": rows,
-            "weekdays": WEEKDAYS,
-            "this_week": _week_letter(progress.week_of(_today())),
-            "tab": "coach",
-        },
-    )
-
-
-def _week_letter(week):
-    return "B" if week == PlanDrill.WEEK_B else "A"
-
-
-@coach_required
-def coach_plan_day(request, weekday):
-    plan = TrainingPlan.get_active()
-    if plan is None:
-        return redirect("training:coach_plan")
-    day = get_object_or_404(PlanDay, plan=plan, weekday=weekday)
-
-    # One week of the fortnight at a time, defaulting to the one he is
-    # actually in, so what is on screen is what Will will see today.
-    asked = request.GET.get("week") or request.POST.get("week")
-    week = {"A": PlanDrill.WEEK_A, "B": PlanDrill.WEEK_B}.get(
-        asked, progress.week_of(_today())
-    )
-    here = f"{reverse('training:coach_plan_day', args=[weekday])}?week={_week_letter(week)}"
-
-    form = PlanDayForm(instance=day)
-
-    if request.method == "POST":
-        action = request.POST.get("action")
-
-        if action == "settings":
-            form = PlanDayForm(request.POST, instance=day)
-            if form.is_valid():
-                form.save()
-                return redirect(here)
-            # Fall through so the invalid form renders with its errors.
-        elif action == "add":
-            drill = get_object_or_404(Drill, pk=request.POST.get("drill"))
-            next_order = (
-                day.items.filter(week=week)
-                .order_by("-order")
-                .values_list("order", flat=True)
-                .first()
-            )
-            PlanDrill.objects.create(
-                plan_day=day, drill=drill, order=(next_order or 0) + 1, week=week
-            )
-            return redirect(here)
-        elif action == "remove":
-            day.items.filter(pk=request.POST.get("item")).delete()
-            return redirect(here)
-        elif action in {"up", "down"}:
-            _move_item(day, request.POST.get("item"), action, week)
-            return redirect(here)
-
-    items = (
-        day.items.select_related("drill", "drill__skill")
-        .filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week))
-        .order_by("order", "pk")
-    )
-    return render(
-        request,
-        "training/coach/plan_day.html",
-        {
-            "day": day,
-            "form": form,
-            "items": items,
-            "skills": Skill.objects.prefetch_related("drills"),
-            "planned_minutes": sum(i.drill.estimated_minutes for i in items),
-            "week": _week_letter(week),
-            "every_week": PlanDrill.EVERY_WEEK,
-        },
-    )
-
-
-def _move_item(day, item_pk, direction, week):
-    """Swap a drill with its neighbour in one week's running order.
-
-    Scoped to the week on screen: the two halves of the fortnight each number
-    their drills from one, and reordering across both would interleave them.
-    """
-    items = list(
-        day.items.filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week)).order_by(
-            "order", "pk"
-        )
-    )
-    index = next((i for i, it in enumerate(items) if str(it.pk) == str(item_pk)), None)
-    if index is None:
-        return
-    target = index - 1 if direction == "up" else index + 1
-    if not (0 <= target < len(items)):
-        return
-    # Rewrite the whole day's ordering so gaps and ties cannot accumulate.
-    items[index], items[target] = items[target], items[index]
-    for position, item in enumerate(items, start=1):
-        if item.order != position:
-            item.order = position
-            item.save(update_fields=["order"])
-
-
-@coach_required
-def coach_drills(request):
-    drills = Drill.objects.select_related("skill").order_by("skill__order", "name")
-    return render(request, "training/coach/drills.html", {"drills": drills})
-
-
-@coach_required
-def coach_drill_edit(request, slug=None):
-    drill = get_object_or_404(Drill, slug=slug) if slug else None
-    if request.method == "POST":
-        form = DrillForm(request.POST, instance=drill)
-        if form.is_valid():
-            form.save()
-            return redirect("training:coach_drills")
-    else:
-        form = DrillForm(instance=drill)
-
-    # A drill that ships in seed_drills.py is rewritten from that file every
-    # time the seeder runs, which is on every deploy. An edit made here to one
-    # of those is a try-it-out, not a change, and the screen says so - Phil
-    # would otherwise make a coaching tweak on his phone and find it undone by
-    # a push days later with nothing to connect the two. Drills he created
-    # himself have slugs the seeder has never heard of and are left alone.
-    from .management.commands.seed_drills import DRILLS
-
-    seeded_drill = drill is not None and drill.slug in {row[0] for row in DRILLS}
-
-    return render(
-        request,
-        "training/coach/drill_form.html",
-        {"form": form, "drill": drill, "seeded_drill": seeded_drill},
-    )
 
 
 @coach_required
@@ -507,8 +155,10 @@ def coach_log_edit(request, pk):
 
     A count nobody watched him make can end up on his record board for ever,
     so it has to be fixable. Only the number changes: deleting the row would
-    say he never did the drill at all, which would move his streak and his
-    badges, and a wrong score is not worth rewriting his history over.
+    say he never did the drill at all, which would move his head start and
+    his badges. A count moves only his records on Before the cards and the
+    three "from before" keepy-up bests - never points or badges, which count
+    rows, not reps.
     """
     athlete = get_athlete()
     log = get_object_or_404(SessionLog, pk=pk, athlete=athlete)
@@ -517,10 +167,56 @@ def coach_log_edit(request, pk):
     # old rows are leftovers from the timer that was removed, kept because his
     # lifetime minutes are still counted from them.
     if not log.drill.is_timed:
-        log.actual_reps = _parse_int(request.POST.get("reps"), lo=0, hi=10000)
+        if "reps" not in request.POST:
+            # No count sent at all is not "rub it out": change nothing.
+            return redirect("training:coach_logs")
+        raw = request.POST["reps"].strip()
+        reps = _parse_int(raw, lo=0, hi=10000)
+        if raw and reps is None:
+            # Not a number he could have made: change nothing, never wipe a count.
+            messages.error(request, f"Not saved: {raw!r} is not a count.")
+            return redirect("training:coach_logs")
+        log.actual_reps = reps
         log.save(update_fields=["actual_reps"])
+        shown = log.actual_reps if log.actual_reps is not None else "no count"
+        messages.success(request, f"Saved: {log.drill.name}, {log.date:%d %b} - {shown}.")
 
     return redirect("training:coach_logs")
+
+
+@coach_required
+@require_GET
+def coach_cards(request):
+    """His cards: what has backed up from his phone, read-only (leg 4).
+
+    The phone's copy wins on the phone, so nothing here edits a play. Read it
+    signed in as staff: /api/plays/ refuses staff, so Dad's phone can never
+    put a play on Will's record.
+    """
+    athlete = get_athlete()
+    today = timezone.localdate()
+    summary, bests, page = None, [], None
+    if athlete:
+        summary = deck_rules.coach_summary(athlete, today)
+        bests = deck_rules.card_bests(athlete, summary["starting_bests"])
+        plays = (
+            Play.objects.filter(athlete=athlete)
+            .select_related("card")
+            .order_by("-date", "-played_at")
+        )
+        page = Paginator(plays, 50).get_page(request.GET.get("page"))
+    return render(
+        request,
+        "training/coach/cards.html",
+        {
+            "athlete": athlete,
+            "summary": summary,
+            "bests": bests,
+            "page": page,
+            "as_of": timezone.localtime(),
+            "coach_page": "cards",
+        },
+    )
 
 
 @coach_required
@@ -531,20 +227,12 @@ def coach_logs(request):
         logs = (
             SessionLog.objects.filter(athlete=athlete)
             .select_related("drill", "drill__skill")
-            .order_by("-date", "-created_at")[:200]
+            .order_by("-date", "-created_at")
         )
-    day = _today()
     return render(
         request,
         "training/coach/logs.html",
-        {
-            "logs": logs,
-            "athlete": athlete,
-            "streak": progress.current_streak(athlete, day),
-            "month_sessions": progress.sessions_this_month(athlete, day)
-            if athlete
-            else 0,
-        },
+        {"logs": logs, "athlete": athlete, "coach_page": "before"},
     )
 
 
@@ -639,9 +327,8 @@ def _precache_urls():
     """Pages and assets the service worker should hold for offline use.
 
     The deck at `/` draws itself from the page and deck.js, so those two are
-    the whole app offline. The old fixed-plan screens are no longer kept:
-    they are off his tab bar (leg 3c), and offline they show the offline page.
-    app.js stays - it replays ticks still queued on his phone.
+    the whole app offline. app.js registers this worker and shows the
+    connection banner.
     """
     urls = [
         reverse("training:deck"),
@@ -670,10 +357,11 @@ def offline(request):
 
 
 def _parse_int(value, lo=None, hi=None):
-    try:
-        number = int(value)
-    except (TypeError, ValueError):
+    """A plain whole number in range, or None. ASCII digits only: int() would
+    also take other scripts' digits, which no form here can send."""
+    if not isinstance(value, str) or not (value.isascii() and value.isdigit()):
         return None
+    number = int(value)
     if lo is not None and number < lo:
         return None
     if hi is not None and number > hi:
@@ -681,17 +369,3 @@ def _parse_int(value, lo=None, hi=None):
     return number
 
 
-def _parse_date(value):
-    """Parse an ISO date sent by the offline queue, ignoring anything odd."""
-    if not value:
-        return None
-    try:
-        parsed = date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
-    # A queued completion can only ever be from the recent past, never the
-    # future. This stops a wrong phone clock writing nonsense into history.
-    today_ = _today()
-    if parsed > today_ or parsed < today_ - timedelta(days=14):
-        return None
-    return parsed

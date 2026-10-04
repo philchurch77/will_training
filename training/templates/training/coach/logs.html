@@ -1,45 +1,54 @@
 {% extends "training/base.html" %}
-{% block title %}Coach - sessions{% endblock %}
-{% block heading %}His sessions{% endblock %}
+{% block title %}Coach - Will's sessions before the cards{% endblock %}
+{% block heading %}Coach{% endblock %}
 {% block body_class %}coach{% endblock %}
 
 {% block content %}
-<h1>{{ athlete.first_name|default:"Will" }}'s sessions</h1>
-<p class="muted">
-  Current streak {{ streak }} &middot; {{ month_sessions }} session{{ month_sessions|pluralize }} this month.
-  Showing the most recent 200. Counts are editable - change one and tick to
-  save, or empty the box to rub it out. The session itself stays either way, so
-  his streak and his badges do not move. The minutes on older rows are from the
-  per-drill timer that no longer exists.
-</p>
+{% if user.is_staff %}
+  {# Staff never get Will's deck: plays made there could only ever sync onto him later. #}
+  <a class="linkbtn" href="{% url 'admin:index' %}">&larr; Admin</a>
+{% else %}
+  <a class="linkbtn" href="{% url 'training:deck' %}">&larr; Back to the cards</a>
+{% endif %}
 
+<h1 class="mt">{{ athlete.first_name|default:"Will" }}'s sessions before the cards</h1>
+{% include "training/coach/_switch.html" %}
+{% for message in messages %}<p class="card" role="status">{{ message }}</p>{% endfor %}
+<p class="muted">Everything he ticked on the old plan, newest first. His card plays are on His cards.</p>
+<ul class="muted">
+  <li>Change a count and tap the tick to save. Empty the box to rub it out.</li>
+  <li>A count only moves his records on Before the cards and his three keepy-up bests. His points and badges never move.</li>
+</ul>
+
+<div class="table-wrap mt">
 <table>
-  <tr><th>Date</th><th>Drill</th><th>Count</th><th>Felt</th></tr>
+  <thead>
+    <tr><th scope="col">Date</th><th scope="col">Drill</th><th scope="col">Count</th><th scope="col">Felt</th></tr>
+  </thead>
+  <tbody>
   {% for log in logs %}
     <tr>
       <td class="muted">{{ log.date|date:"D j M" }}</td>
       <td>
         {{ log.drill.name }}<br>
-        <span class="muted" style="font-size:13px">{{ log.drill.skill.name }}</span>
+        <span class="muted small">{{ log.drill.skill.name }}</span>
       </td>
       <td>
         {% if log.drill.is_timed %}
-          {# Old rows only: the per-drill timer is gone, so nothing writes #}
-          {# minutes any more. Shown because his lifetime minutes come from #}
-          {# these, but there is nothing here worth editing. #}
+          {# Old rows only: minutes from the per-drill timer, which no longer exists. Nothing to edit. #}
           {% if log.actual_minutes %}
             <span class="muted">{{ log.actual_minutes }} min</span>
           {% else %}<span class="muted">&mdash;</span>{% endif %}
         {% else %}
-          {# Editable: a count nobody watched him make would otherwise sit on #}
-          {# his record board for ever. Empty the box to rub it out. #}
+          {# Editable: a count nobody watched him make would otherwise sit on his records for ever. #}
           <form method="post" class="logedit"
                 action="{% url 'training:coach_log_edit' log.pk %}">
             {% csrf_token %}
             <input type="number" name="reps" min="0" max="10000" inputmode="numeric"
                    value="{{ log.actual_reps|default_if_none:'' }}"
                    aria-label="Reps for {{ log.drill.name }} on {{ log.date|date:'j M' }}">
-            <button class="sbtn" type="submit" aria-label="Save">&#10003;</button>
+            <button class="sbtn" type="submit"
+                    aria-label="Save reps for {{ log.drill.name }} on {{ log.date|date:'j M' }}">&#10003;</button>
           </form>
         {% endif %}
       </td>
@@ -48,11 +57,11 @@
       </td>
     </tr>
   {% empty %}
-    <tr><td colspan="4" class="muted">Nothing logged yet.</td></tr>
+    <tr><td colspan="4" class="muted">Nothing logged before the cards.</td></tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
 
-<p class="center mt">
-  <a class="linkbtn" href="{% url 'training:coach_plan' %}">&larr; Back to the week</a>
-</p>
+{% include "training/coach/_signout.html" %}
 {% endblock %}

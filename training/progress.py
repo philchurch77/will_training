@@ -1,8 +1,9 @@
-"""Streak, stats and badge logic.
+"""His history from before the cards, and the kept badges' award step.
 
-Every function takes the reference date explicitly rather than calling
-date.today() internally, so the tests can pin a date and the behaviour around
-month ends and rest days is provable.
+The fixed plan was retired in leg 3d. What it left - SessionLog, SessionClock
+and the drills - no longer grows, and these functions read it for Before the
+cards, the head start and the kept badges. Nothing here calls date.today():
+the tests pin dates.
 """
 
 from datetime import timedelta
@@ -10,46 +11,18 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from django.db.models import Max
 
-
-from django.db.models import Q
-
 from . import deck_rules
-from .models import (
-    Badge,
-    Drill,
-    PlanDrill,
-    EarnedBadge,
-    SessionClock,
-    SessionLog,
-    Skill,
-    TrainingPlan,
-)
-
-# How far back current_streak() will walk before giving up. A 9-year-old is not
-# going to beat this, and it stops a pathological loop if data goes strange.
-MAX_STREAK_LOOKBACK_DAYS = 800
+from .models import Badge, Drill, EarnedBadge, SessionClock, SessionLog, Skill
 
 DONE = "done"
 REST = "rest"
 MISSED = "missed"
 
-
-def week_of(day):
-    """Which half of the fortnight a date falls in: PlanDrill.WEEK_A or WEEK_B.
-
-    Monday-aligned and continuous - ordinal 1 was itself a Monday - so unlike
-    ISO week numbers this never repeats a week at a year boundary, and every
-    day of a Monday-to-Sunday week is always in the same half.
-    """
-    return PlanDrill.WEEK_A if ((day.toordinal() - 1) // 7) % 2 == 0 else PlanDrill.WEEK_B
-
-
-def plan_day_for(day, plan=None):
-    """The PlanDay covering a given date, or None if there is no active plan."""
-    plan = plan or TrainingPlan.get_active()
-    if plan is None:
-        return None
-    return plan.days.filter(weekday=day.weekday()).first()
+# The plan's rest days as they stood when it was retired: Monday to Saturday
+# required, Sunday rest. Frozen here because the streak used to read them from
+# the active plan, and with no plan every missed day would read as rest - his
+# best streak would quietly join every day he ever trained into one run.
+REST_WEEKDAYS = frozenset({6})
 
 
 def completed_dates(athlete):
@@ -61,46 +34,17 @@ def completed_dates(athlete):
     )
 
 
-def day_state(day, done_dates, plan=None):
+def day_state(day, done_dates):
     """Classify a single day as done, rest or missed.
 
-    A day counts as *done* if Will completed any drill at all. That is
-    deliberately generous: ticking one drill should keep a streak alive.
-
-    Rest days and optional days (academy, match day) are *rest*: they neither
-    extend a streak nor break it. He cannot lose a streak by resting when the
-    plan told him to rest.
+    A day counts as *done* if Will completed any drill at all. A rest day
+    neither extends a streak nor breaks it.
     """
     if day in done_dates:
         return DONE
-    plan_day = plan_day_for(day, plan)
-    if plan_day is None or not plan_day.is_required:
+    if day.weekday() in REST_WEEKDAYS:
         return REST
     return MISSED
-
-
-def current_streak(athlete, today):
-    """Consecutive training days up to today.
-
-    Today not being done yet does not break the streak - otherwise it would
-    read zero every morning, which is exactly when he needs to see it.
-    """
-    done_dates = completed_dates(athlete)
-    plan = TrainingPlan.get_active()
-
-    streak = 0
-    day = today
-    for offset in range(MAX_STREAK_LOOKBACK_DAYS):
-        state = day_state(day, done_dates, plan)
-        if state == DONE:
-            streak += 1
-        elif state == MISSED:
-            # Today being incomplete is not a miss yet - he still has the
-            # rest of the day. Any earlier miss ends the streak.
-            if offset > 0:
-                break
-        day -= timedelta(days=1)
-    return streak
 
 
 def longest_streak(athlete):
@@ -108,14 +52,13 @@ def longest_streak(athlete):
     done_dates = completed_dates(athlete)
     if not done_dates:
         return 0
-    plan = TrainingPlan.get_active()
 
     best = 0
     run = 0
     day = min(done_dates)
     last = max(done_dates)
     while day <= last:
-        state = day_state(day, done_dates, plan)
+        state = day_state(day, done_dates)
         if state == DONE:
             run += 1
             best = max(best, run)
@@ -125,39 +68,17 @@ def longest_streak(athlete):
     return best
 
 
-def sessions_this_month(athlete, today):
-    """Number of days this calendar month with at least one completed drill."""
-    return (
-        SessionLog.objects.filter(
-            athlete=athlete,
-            completed=True,
-            date__year=today.year,
-            date__month=today.month,
-        )
-        .values("date")
-        .distinct()
-        .count()
-    )
-
-
 def drills_completed(athlete):
     return SessionLog.objects.filter(athlete=athlete, completed=True).count()
 
 
-def personal_best(athlete, drill, before=None):
-    """His best count on a rep drill, or None if he has never counted one.
-
-    `before` leaves out one day, which is how a completion works out whether
-    the number he has just posted is a new record: the row for today is
-    overwritten by the tick, so the old best has to be read without it.
-    """
+def personal_best(athlete, drill):
+    """His best count on a rep drill, or None if he has never counted one."""
     if drill.is_timed:
         return None
     logs = SessionLog.objects.filter(
         athlete=athlete, drill=drill, completed=True, actual_reps__isnull=False
     )
-    if before is not None:
-        logs = logs.exclude(date=before)
     return logs.aggregate(best=Max("actual_reps"))["best"]
 
 
@@ -244,74 +165,6 @@ def total_minutes(athlete):
     return round(sum(minutes for _log, minutes in _minutes_per_log(athlete)))
 
 
-def _required_drills_by_weekday(week, plan=None):
-    """Weekday -> the set of drill ids that day asks for, in one week of the two.
-
-    Only required days appear. Rest and optional days are left out entirely,
-    for the same reason they cannot break a streak: he is not expected to
-    train on them.
-    """
-    plan = plan or TrainingPlan.get_active()
-    if plan is None:
-        return {}
-
-    wanted = {}
-    for plan_day in plan.days.all():
-        if not plan_day.is_required:
-            continue
-        ids = set(
-            plan_day.items.filter(drill__is_active=True)
-            .filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week))
-            .values_list("drill_id", flat=True)
-        )
-        if ids:
-            wanted[plan_day.weekday] = ids
-    return wanted
-
-
-def perfect_weeks(athlete, today):
-    """Whole weeks (Monday to Sunday) with every training day completed in full.
-
-    The hardest thing in the app. A streak only needs one drill a day; this
-    needs the whole session, on every day the plan asked for, for a week.
-
-    Like the streak, it reads the plan as it stands today rather than as it
-    stood back then - one athlete, one maintainer, and a rebuilt history is
-    not worth the machinery.
-    """
-    # A whole Monday-to-Sunday week sits in one half of the fortnight, so the
-    # session it should have been is decided once per week, not per day.
-    by_week = {
-        PlanDrill.WEEK_A: _required_drills_by_weekday(PlanDrill.WEEK_A),
-        PlanDrill.WEEK_B: _required_drills_by_weekday(PlanDrill.WEEK_B),
-    }
-    if not any(by_week.values()):
-        return 0
-
-    done = {}
-    for day, drill_id in SessionLog.objects.filter(
-        athlete=athlete, completed=True
-    ).values_list("date", "drill_id"):
-        done.setdefault(day, set()).add(drill_id)
-    if not done:
-        return 0
-
-    first = min(done)
-    week = first - timedelta(days=first.weekday())  # the Monday of that week
-    weeks = 0
-    while week <= today:
-        days = [week + timedelta(days=offset) for offset in range(7)]
-        wanted = by_week[week_of(week)]
-        if wanted and all(
-            wanted[day.weekday()] <= done.get(day, set())
-            for day in days
-            if day.weekday() in wanted
-        ):
-            weeks += 1
-        week += timedelta(days=7)
-    return weeks
-
-
 def minutes_by_skill(athlete, since=None):
     """Minutes trained per skill category, for the Progress bar chart.
 
@@ -358,38 +211,15 @@ def kept_badge_values(athlete, rows=None):
     }
 
 
-def _badge_values(athlete, today):
-    """Current value of each badge metric."""
-    return {
-        Badge.STREAK: current_streak(athlete, today),
-        Badge.TOTAL_MINUTES: total_minutes(athlete),
-        Badge.PERFECT_WEEKS: perfect_weeks(athlete, today),
-        **kept_badge_values(athlete),
-    }
-
-
-def award_badges(athlete, today):
-    """Create EarnedBadge rows for anything newly earned.
-
-    Returns the list of badges earned by this call, so the Today screen can pop
-    a celebration card. Existing awards are never duplicated or revoked.
-
-    Never a deck badge - those are worked out from his plays, at sync, by
-    deck_rules.award_deck_badges.
-    """
-    old_kinds = {kind for kind, _ in Badge.KIND_CHOICES} - Badge.DECK_KINDS
-    return award(athlete, _badge_values(athlete, today), old_kinds, today)
-
-
 def award(athlete, values, kinds, today):
     """Award every active badge of `kinds` whose value has reached its
     threshold and that he does not hold yet. Returns the badges awarded now.
 
-    The one award step, for a tick on Today and a deck sync alike. Never
-    deletes or revokes, and never a retired badge. Each award is made in its
-    own savepoint, so two paths racing to the same badge leave one row and
-    no error - the unique constraint decides, never a get(). Without it, the
-    race would roll back the tick that drill_complete's transaction holds.
+    The one award step, called at sync (deck_rules.award_deck_badges) - since
+    leg 3d there is no tick to award from. Never deletes or revokes, and never
+    a retired badge. Each award is made in its own savepoint, so two syncs
+    racing to the same badge leave one row and no error - the unique
+    constraint decides, never a get().
     """
     already = set(
         EarnedBadge.objects.filter(athlete=athlete).values_list("badge_id", flat=True)
@@ -407,84 +237,3 @@ def award(athlete, values, kinds, today):
     return newly
 
 
-def record_session_seconds(athlete, day, seconds, exact=False):
-    """Save how long today's session has been running.
-
-    Normally only ever upwards. The clock is posted with every tick as well as
-    by the Finish button, and a tick queued offline can arrive long after the
-    session has moved on, so the later, larger value must win. Nonsense is
-    clamped rather than rejected: a stuck clock should not lose him the tick it
-    rode in on.
-
-    `exact` is for the one case where a smaller number is the right answer: he
-    forgot to start the clock and is telling us by hand what he actually did.
-    A figure he typed in himself beats anything the phone worked out.
-    """
-    try:
-        seconds = int(seconds)
-    except (TypeError, ValueError):
-        return None
-    seconds = max(0, min(seconds, SessionClock.MAX_SECONDS))
-    if seconds <= 0:
-        return None
-
-    clock, created = SessionClock.objects.get_or_create(
-        athlete=athlete, date=day, defaults={"seconds": seconds}
-    )
-    if not created and (exact or seconds > clock.seconds):
-        clock.seconds = seconds
-        clock.save(update_fields=["seconds", "updated_at"])
-    return clock
-
-
-def session_seconds(athlete, day):
-    """Seconds already banked for a day - the floor the phone's clock starts from."""
-    clock = SessionClock.objects.filter(athlete=athlete, date=day).first()
-    return clock.seconds if clock else 0
-
-
-def session_for(day, plan=None):
-    """The PlanDay and its ordered drills for a given date.
-
-    Returns (plan_day, drills). Both may be empty if no plan is active or the
-    day is a rest day.
-    """
-    plan_day = plan_day_for(day, plan)
-    if plan_day is None:
-        return None, []
-    items = (
-        plan_day.items.select_related("drill", "drill__skill")
-        .filter(drill__is_active=True)
-        .filter(Q(week=PlanDrill.EVERY_WEEK) | Q(week=week_of(day)))
-        .order_by("order", "pk")
-    )
-    return plan_day, [item.drill for item in items]
-
-
-def today_summary(athlete, today):
-    """Everything the Today screen needs, in one place."""
-    plan_day, drills = session_for(today)
-    done_slugs = set(
-        SessionLog.objects.filter(
-            athlete=athlete, date=today, completed=True
-        ).values_list("drill__slug", flat=True)
-    )
-    rows = [
-        {"drill": drill, "done": drill.slug in done_slugs} for drill in drills
-    ]
-    planned_minutes = sum(drill.estimated_minutes for drill in drills)
-    clock = session_seconds(athlete, today)
-    return {
-        "plan_day": plan_day,
-        "rows": rows,
-        "drills": drills,
-        "done_count": sum(1 for row in rows if row["done"]),
-        "total_count": len(rows),
-        "all_done": bool(rows) and all(row["done"] for row in rows),
-        "planned_minutes": plan_day.target_minutes if plan_day else planned_minutes,
-        # What the server already knows about today's clock. The phone holds
-        # the running state; this is the floor it starts from, so a reload or
-        # a second device cannot rewind the session.
-        "clock_seconds": clock,
-        "clock_minutes": round(clock / 60),
-    }

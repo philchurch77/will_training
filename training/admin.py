@@ -1,17 +1,6 @@
 from django.contrib import admin
 
-from .models import (
-    Badge,
-    Card,
-    Drill,
-    EarnedBadge,
-    PlanDay,
-    PlanDrill,
-    Play,
-    SessionLog,
-    Skill,
-    TrainingPlan,
-)
+from .models import Badge, Card, Drill, EarnedBadge, Play, SessionLog, Skill
 
 
 class NoDeleteMixin:
@@ -23,9 +12,8 @@ class NoDeleteMixin:
     badges - from a bulk action and one confirmation page. There is no undo
     and nothing to type back in.
 
-    Retiring is the supported way to take a drill out of circulation: add its
-    slug to RETIRED in seed_drills.py, which sets is_active=False and leaves
-    the row, and his history, alone.
+    Since leg 3d every drill is retired (is_active=False) and kept, so the
+    history that points at it stays whole.
     """
 
     def has_delete_permission(self, request, obj=None):
@@ -49,35 +37,30 @@ class DrillAdmin(NoDeleteMixin, admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
 
-class PlanDrillInline(admin.TabularInline):
-    model = PlanDrill
-    extra = 1
-    autocomplete_fields = ("drill",)
-
-
-@admin.register(PlanDay)
-class PlanDayAdmin(admin.ModelAdmin):
-    list_display = ("plan", "get_weekday_display", "label", "is_rest", "is_optional")
-    list_filter = ("plan", "is_rest", "is_optional")
-    inlines = [PlanDrillInline]
-
-
-class PlanDayInline(admin.TabularInline):
-    model = PlanDay
-    extra = 0
-
-
-@admin.register(TrainingPlan)
-class TrainingPlanAdmin(admin.ModelAdmin):
-    list_display = ("name", "is_active", "created_at")
-    inlines = [PlanDayInline]
+# The plan's own admins went with the plan (leg 3d). Its rows stay in the
+# database untouched; nothing reads them.
 
 
 @admin.register(SessionLog)
-class SessionLogAdmin(admin.ModelAdmin):
+class SessionLogAdmin(NoDeleteMixin, admin.ModelAdmin):
+    """His ticks from before the cards. Read-only but for the count.
+
+    Since leg 3d nothing else writes a SessionLog, and each row is worth 5
+    head-start points and a step toward a kept badge. So no add (a tick
+    through the back door), no delete (a tick taken away), and the date,
+    drill and athlete are fixed. A count is corrected on the Coach screen.
+    """
+
     list_display = ("date", "drill", "athlete", "completed", "rating")
     list_filter = ("completed", "rating", "date")
     date_hierarchy = "date"
+    readonly_fields = (
+        "athlete", "date", "drill", "completed", "actual_minutes", "rating",
+        "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
 
 
 @admin.register(Badge)
@@ -94,8 +77,7 @@ class BadgeAdmin(NoDeleteMixin, admin.ModelAdmin):
 
 @admin.register(EarnedBadge)
 class EarnedBadgeAdmin(NoDeleteMixin, admin.ModelAdmin):
-    """Already earned stays earned. The one way a badge goes is
-    clear_trial_plays, for Dad's trial before the deck is handed over."""
+    """Already earned stays earned. Nothing removes an award."""
 
     list_display = ("badge", "athlete", "earned_on")
 

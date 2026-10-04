@@ -63,3 +63,7 @@ carries 0009+0010 in one `migrate` pass.
 
 Legs 3a, 3b, 3c: no migrations. Dev `showmigrations` 0001-0010 applied,
 `makemigrations --check` clean on 2026-10-04 (deck-step-3c).
+
+Leg 3d (deck-step-3d, reviewed 2026-10-04): no migration. `makemigrations
+--check` clean, dev showmigrations 0001-0010 applied. Plan models kept in
+models.py (tables untouched), only `get_absolute_url`s removed.

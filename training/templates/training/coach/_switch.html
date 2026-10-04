@@ -1,0 +1,4 @@
+<nav class="coach-switch" aria-label="Coach pages">
+  <a class="linkbtn{% if coach_page == 'cards' %} is-on{% endif %}" href="{% url 'training:coach_cards' %}"{% if coach_page == 'cards' %} aria-current="page"{% endif %}>His cards</a>
+  <a class="linkbtn{% if coach_page == 'before' %} is-on{% endif %}" href="{% url 'training:coach_logs' %}"{% if coach_page == 'before' %} aria-current="page"{% endif %}>Before the cards</a>
+</nav>

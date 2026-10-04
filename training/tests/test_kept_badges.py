@@ -177,47 +177,6 @@ class TestKeptBadgeIsolation:
 
 
 class TestKeptBadgesAreNeverLost:
-    # Catches the clear's delete being widened to the kept kinds. drills-10
-    # here was reached only with the trial plays, so a widened delete plus
-    # re-award loses it outright; first-session is still reached, so a
-    # widened delete would hand it back with today's date in place of his.
-    def test_clear_trial_plays_leaves_kept_awards_and_their_dates(
-        self, deck, all_badges, will, drill
-    ):
-        ticks(will, drill, 7)
-        through = timezone.localdate() - timedelta(days=5)
-        for slug in ("toe-taps-30", "free-play", "keepy-ups-best"):
-            make_play(will, slug, through - timedelta(days=1))
-        drills_10 = earn(will, "drills-10", on=date(2026, 3, 1))
-        first = earn(will, "first-session", on=date(2026, 1, 5))
-        call_command(
-            "clear_trial_plays", "--through", through.isoformat(),
-            "--confirm", "--expect", "3", stdout=StringIO(),
-        )
-        assert not Play.objects.exists()
-        kept = {eb.pk: eb.earned_on for eb in EarnedBadge.objects.filter(athlete=will)}
-        assert kept[drills_10.pk] == date(2026, 3, 1)
-        assert kept[first.pk] == date(2026, 1, 5)
-
-    # Catches the award being moved back out of its own savepoint in
-    # drill_complete, or the try/except going: a badge failure would roll
-    # back the tick and the count he just entered.
-    def test_a_tick_and_its_count_survive_award_badges_raising(
-        self, client, will, rep_drill, monkeypatch
-    ):
-        def explode(*args, **kwargs):
-            raise RuntimeError("simulated")
-
-        monkeypatch.setattr("training.progress.award_badges", explode)
-        client.force_login(will)
-        response = client.post(
-            reverse("training:drill_complete", args=[rep_drill.slug]), {"actual_reps": "37"}
-        )
-        assert response.status_code == 302
-        log = SessionLog.objects.get(athlete=will, drill=rep_drill)
-        assert log.completed
-        assert log.actual_reps == 37
-
     # Catches award() losing the savepoint around each create. A second path
     # awarding the same badge between the `already` read and the create is
     # simulated by making the read stale. Without the savepoint the
@@ -368,23 +327,6 @@ class TestKeptBadgeAwardPaths:
         make_play(will, "toe-taps-30", LONG_AGO)
         make_play(will, "free-play", LONG_AGO, score=None)
 
-    # Catches the Today path counting ticks alone: six ticks and three
-    # card-days, and the seventh tick on Today is the one that makes ten.
-    def test_ticks_and_card_days_together_earn_10_drills_on_today(
-        self, client, deck, all_badges, will, drill
-    ):
-        ticks(will, drill, 6)
-        for slug in ("toe-taps-30", "free-play", "keepy-ups-best"):
-            make_play(will, slug, LONG_AGO)
-        assert "drills-10" not in codes_of(will)
-        client.force_login(will)
-        response = client.post(
-            reverse("training:drill_complete", args=[drill.slug]),
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-        assert "10 drills" in {b["name"] for b in response.json()["badges"]}
-        assert "drills-10" in codes_of(will)
-
     # Catches the sync path not awarding kept kinds, or not reading old
     # ticks: the third card-day is what tips seven ticks into ten.
     def test_ticks_and_card_days_together_earn_10_drills_at_sync(
@@ -404,23 +346,10 @@ class TestKeptBadgeAwardPaths:
         ticks(will, drill, 7)
         for slug in ("toe-taps-30", "free-play", "keepy-ups-best"):
             make_play(other, slug, LONG_AGO)
-        assert "drills-10" not in {b.code for b in progress.award_badges(will, LONG_AGO)}
+        assert "drills-10" not in {b.code for b in deck_rules.award_deck_badges(will, LONG_AGO)}
         assert "drills-10" not in {
             b.code for b in deck_rules.award_deck_badges(other, LONG_AGO)
         }
-
-    # Catches a badge won on Today being celebrated again by the deck, or a
-    # second row: the sync must see it as already held.
-    def test_a_kept_badge_earned_on_today_is_not_awarded_again_at_sync(
-        self, client, deck, all_badges, will, drill
-    ):
-        ticks(will, drill, 10)
-        assert "drills-10" in {b.code for b in progress.award_badges(will, LONG_AGO)}
-        client.force_login(will)
-        body = post(client, [api_play("toe-taps-30")]).json()
-        assert "drills-10" not in body["badges"]
-        assert EarnedBadge.objects.filter(athlete=will, badge__code="drills-10").count() == 1
-
 
 # --- 4. the deck's badge screen ----------------------------------------------
 
@@ -458,21 +387,3 @@ class TestDeckBadgeScreen:
 # --- 5. the clear's dry run flags what the trial plays earned ----------------
 
 
-class TestClearTrialPlaysFlagsKeptBadges:
-    # Catches the backstop missing a kept badge only the trial plays reached,
-    # or crying wolf on one his ticks reach on their own.
-    def test_the_dry_run_flags_only_kept_awards_the_trial_plays_made(
-        self, deck, all_badges, will, drill
-    ):
-        ticks(will, drill, 7)
-        through = timezone.localdate() - timedelta(days=5)
-        for slug in ("toe-taps-30", "free-play", "keepy-ups-best"):
-            make_play(will, slug, through)
-        earn(will, "drills-10")
-        earn(will, "first-session")
-        out = StringIO()
-        call_command("clear_trial_plays", "--through", through.isoformat(), stdout=out)
-        text = out.getvalue()
-        assert "check by hand: 10 drills for will" in text
-        assert "First session" not in text
-        assert Play.objects.count() == 3

@@ -153,6 +153,12 @@ def api_plays(request):
         owners[play.pk] = request.user.pk
         saved.append(str(play.pk))
 
+    # The phone keeps a refused play and shows a count; this is the one place
+    # the reason is written down. The id is the phone's, the reason one of a
+    # few fixed words - no score goes in the log.
+    for refusal in refused:
+        logger.warning("play refused: %r (%s)", refusal["id"], refusal["reason"])
+
     # Checked on every sync that holds his plays, not only when one is new:
     # a retry after a lost answer, or a badge added or lowered at deploy, would
     # otherwise wait for his next play. Awarded after the plays are saved, and
@@ -250,7 +256,8 @@ def _deck_badges_json(athlete):
 
 def _earned_codes(athlete):
     """Every badge he has, so the phone's cache knows them as earned rather
-    than news - one won on Today is not celebrated again on the deck."""
+    than news - one already earned (a Legend, or one from before the cards) is
+    never celebrated again."""
     return list(
         EarnedBadge.objects.filter(athlete=athlete).values_list("badge__code", flat=True)
     )

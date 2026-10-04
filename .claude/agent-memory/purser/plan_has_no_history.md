@@ -45,3 +45,10 @@ same day. Net effect: a plan change can drive `perfect_weeks()` to 0 for all
 of history and **nothing visible to Will changes**. Report it as Low, not
 Medium, unless a perfect-weeks badge with threshold > 1 is ever added - then
 the progress counter on the *unearned* one goes backwards where he can see it.
+
+**Superseded by leg 3d (2026-10-04):** the plan is no longer read at all.
+`perfect_weeks`, `current_streak`, `session_for` deleted. `longest_streak`
+now uses frozen `progress.REST_WEEKDAYS = {6}`, equivalent to the last seeded
+PLAN_DAYS (Mon-Sat required, no optional, Sun rest). `test_finds_the_best_run`
+would catch a regression to "every missed day is rest". Plan edits can no
+longer move any number.

@@ -1,0 +1,91 @@
+{% extends "training/base.html" %}
+{% load deck_format %}
+{% block title %}Coach - Will's cards{% endblock %}
+{% block heading %}Coach{% endblock %}
+{% block body_class %}coach{% endblock %}
+
+{% block content %}
+{% comment %}
+  His cards, read-only (leg 4): sums and maxes of what his phone stamped and
+  backed up. Nothing here edits a play - the phone's copy wins on the phone.
+{% endcomment %}
+{% if user.is_staff %}
+  {# Staff never get Will's deck: plays made there could only ever sync onto him later. #}
+  <a class="linkbtn" href="{% url 'admin:index' %}">&larr; Admin</a>
+{% else %}
+  <a class="linkbtn" href="{% url 'training:deck' %}">&larr; Back to the cards</a>
+{% endif %}
+
+<h1 class="mt">{{ athlete.first_name|default:"Will" }}'s cards</h1>
+{% include "training/coach/_switch.html" %}
+
+{% if summary %}
+  <p class="coach-lead mt"><strong>{{ summary.level }}</strong> &middot; {{ summary.points }} point{{ summary.points|pluralize }}</p>
+  {% if summary.head_start %}<p class="muted small">Including {{ summary.head_start }} from before the cards.</p>{% endif %}
+  <p><strong>This week</strong> {{ summary.sessions_this_week }} session{{ summary.sessions_this_week|pluralize }} (goal {{ summary.goal_sessions }}){% if summary.sessions_this_week >= summary.goal_sessions %} &#10003;{% endif %}</p>
+  <p><strong>Goal weeks</strong> {{ summary.goal_run }} in a row, {{ summary.goal_total }} in total</p>
+{% endif %}
+<p class="muted small">As of {{ as_of|date:"D j M, H:i" }}. Only what has backed up from his phone - a card played without signal shows once his phone has some.</p>
+
+<h2 class="mt">Best on each card</h2>
+{% if bests %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th scope="col">Card</th><th scope="col">Best</th><th scope="col">Medal</th><th scope="col">Played</th></tr>
+  </thead>
+  <tbody>
+  {% for row in bests %}
+    <tr>
+      <td>{{ row.name }}<br><span class="muted small">{{ row.pack }}</span></td>
+      <td>
+        {% if row.per_foot %}<span class="nowrap">Weak {{ row.weak|score:row.scoring }}</span><br><span class="nowrap">Strong {{ row.best|score:row.scoring }}</span>{% else %}{{ row.best|score:row.scoring }}{% endif %}
+        {% if row.from_before %}<br><span class="muted small">(from before)</span>{% endif %}
+      </td>
+      <td>{{ row.medal|medal|default:"—" }}</td>
+      <td>{{ row.plays }}&times;</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+  <p class="muted">No scored cards have backed up from his phone yet. They show here once he has played one with signal.</p>
+{% endif %}
+
+<h2 class="mt">His plays</h2>
+{% if page and page.object_list %}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th scope="col">Date</th><th scope="col">Card</th><th scope="col">Score</th><th scope="col">Medal</th><th scope="col">Points</th></tr>
+  </thead>
+  <tbody>
+  {% for play in page.object_list %}
+    <tr>
+      <td class="muted">{{ play.date|date:"D j M" }}</td>
+      <td>{{ play.card.name }}<br><span class="muted small">{{ play.card.get_pack_display }}</span></td>
+      <td>
+        {% if play.card.scoring == "none" %}Played{% elif play.card.per_foot %}<span class="nowrap">Weak {{ play.weak_score|score:play.card.scoring }}</span><br><span class="nowrap">Strong {{ play.score|score:play.card.scoring }}</span>{% else %}{{ play.score|score:play.card.scoring }}{% endif %}
+        {% if play.bests %}<br><strong class="small">New best</strong>{% endif %}
+      </td>
+      <td>{{ play.medal|medal|default:"—" }}</td>
+      <td>{% if play.points is None %}<span class="muted">&mdash;</span>{% else %}{{ play.points }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if page.has_other_pages %}
+  <p class="center mt">
+    {% if page.has_previous %}<a class="linkbtn" href="?page={{ page.previous_page_number }}">&larr; Newer</a>{% endif %}
+    <span class="muted">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a class="linkbtn" href="?page={{ page.next_page_number }}">Older &rarr;</a>{% endif %}
+  </p>
+{% endif %}
+{% else %}
+  <p class="muted">Nothing has backed up from his phone yet. Plays show here once he has played a card with signal.</p>
+{% endif %}
+
+{% include "training/coach/_signout.html" %}
+{% endblock %}

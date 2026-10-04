@@ -439,14 +439,13 @@ class TestDeckPage:
     def test_the_deck_script_exists(self):
         assert finders.find("training/js/deck.js")
 
-    # Catches the switch-over (leg 3c) being undone: the deck is the Cards
-    # tab, and the old Today is reached from the coach screen only.
-    def test_the_deck_is_the_cards_tab_and_today_is_coach_only(self, client, will, seeded):
+    # Catches the switch-over (leg 3c) being undone: the deck is the lit
+    # Cards tab, and nothing links back to the retired Today.
+    def test_the_deck_is_the_cards_tab(self, client, will, seeded):
         client.force_login(will)
         deck = client.get(reverse("training:deck")).content.decode()
         assert 'href="/" class="tab is-on" data-tab="cards"' in deck
-        assert reverse("training:today") not in deck
-        assert reverse("training:today") in client.get(reverse("training:coach_plan")).content.decode()
+        assert 'href="/today/"' not in deck
 
 
 class TestDeckServiceWorker:

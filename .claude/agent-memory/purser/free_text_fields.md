@@ -27,3 +27,7 @@ error. Save / reload / re-save is byte-for-byte.
 
 Re-check this if a `maxlength` ever appears on the textarea or if a drill
 description field is added as a `CharField`.
+
+**Leg 3d (2026-10-04):** `forms.py` (DrillForm) and the coach drill screens are
+deleted. No app screen edits any text field now; Drill text is seed-only and
+editable only in DrillAdmin. Coach "His sessions" posts numbers only.

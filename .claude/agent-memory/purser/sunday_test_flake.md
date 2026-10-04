@@ -25,3 +25,6 @@ evidence, rather than as a regression. The real fix is to freeze the date in
 those tests, the way `progress.py` functions already take the date explicitly.
 Observed 2026-09-20 with the whole suite otherwise green (`test_seed.py`: 57
 passed).
+
+Leg 3d deleted the Today screen and those three tests with it; suite ran clean
+on Sunday 2026-10-04. This note is likely obsolete after 3d merges.
