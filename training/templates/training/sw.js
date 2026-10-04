@@ -9,7 +9,7 @@
 // Bump this whenever the CSS, JS or icon change - filenames are not
 // content-hashed, and static assets are served cache-first, so an old cache
 // would keep serving the previous stylesheet forever.
-const CACHE = 'will-training-v26';
+const CACHE = 'will-training-v27';
 
 // Built by the view as JSON. A {% templatetag openblock %} for {% templatetag closeblock %} loop with escapejs works too, but
 // escapejs writes every hyphen as a unicode escape, and a precache list you
@@ -65,6 +65,9 @@ self.addEventListener('fetch', (event) => {
   // the page fallback below would answer it with the offline page as a 200.
   // deck.js keeps its own copy and knows what a failed request means.
   if (url.pathname.startsWith('/api/')) { return; }
+  // Dad's screens are never kept on a phone: a copy of his coach page would
+  // still show Will's plays after signing out, and offline it is no use.
+  if (url.pathname.startsWith('/coach/') || url.pathname.startsWith('/admin/')) { return; }
 
   const isStatic = url.pathname.startsWith('/static/');
 

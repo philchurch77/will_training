@@ -103,7 +103,7 @@ class TestTheOldTickDoorsAreShut:
     # Catches an old bookmark or home-screen shortcut landing on a 404.
     @pytest.mark.parametrize(
         "old, new",
-        [("/today/", "/"), ("/library/", "/"), ("/coach/logs/", "/coach/")],
+        [("/today/", "/"), ("/library/", "/"), ("/coach/logs/", "/coach/before/")],
     )
     def test_old_addresses_go_somewhere_real(self, logged_in, old, new):
         response = logged_in.get(old)

@@ -23,7 +23,7 @@
     <span class="topbar-title">{% block heading %}{% endblock %}</span>
     {% if user.is_authenticated and not request.in_coach %}
       {# Deliberately understated: this is Dad's door, not part of Will's app. #}
-      <a class="linkbtn" href="{% url 'training:coach_logs' %}">Coach</a>
+      <a class="linkbtn" href="{% url 'training:coach_cards' %}">Coach</a>
     {% endif %}
   </div>
 </header>
@@ -33,7 +33,7 @@
   {% block content %}{% endblock %}
 </main>
 
-{% if user.is_authenticated %}
+{% if user.is_authenticated and not user.is_staff %}
 <nav class="tabbar">
   {# Drawn rather than typed: emoji render differently on every phone, and these #}
   {# animate on whichever tab he is standing on. #}

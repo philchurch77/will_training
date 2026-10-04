@@ -49,7 +49,7 @@ training/models.py         Card, Play (the deck); Badge, EarnedBadge; Skill, Dri
 training/deck_data.py      the 51 cards and seed_deck(); called by seed_drills
 training/deck_rules.py     every game number, history rules, deck badges
 training/deck_views.py     / (the deck shell) and /api/plays/ (the backup)
-training/views.py          login, Before the cards, the coach screen, PWA plumbing
+training/views.py          login, Before the cards, the coach screens, PWA plumbing
 training/progress.py       his history from before the cards; the award step
 training/throttle.py       login rate limiting, cache-backed
 static/training/js/deck.js everything he sees and does on /, Progress included
@@ -109,9 +109,11 @@ Function-based views on purpose: one maintainer, re-read in a year.
   cannot be played; it shows "Locked" and what opens it. The Moves card in his
   hand is always the skill of the week at its highest open level.
 - **A deck session is 3 different cards on one day, free play included; a
-  goal week is 3 sessions Mon-Sun.** This is the one rule written twice -
+  goal week is 3 sessions Mon-Sun.** One of only two rules written twice -
   `deck_rules.session_dates` and `weekStatus` in `deck.js`. Change both. The
-  current week never breaks a run; weeks in a row is shown only from 1.
+  current week never breaks a run; weeks in a row is shown only from 1. The
+  other is the player level: `deck_rules.player_level` (the coach page) and
+  `levelFor` in `deck.js`, both reading `LEVELS`.
 - **The hand** is five cards from five packs: always one Moves card and one
   Quick feet or Combos card. It is the same all day until he deals again.
   Free play is a button, not a card in the hand.
@@ -127,8 +129,23 @@ Function-based views on purpose: one maintainer, re-read in a year.
 - **`will-deck-server-v1`** caches what only the server knows - every badge
   he has earned (only ever added), the goal-week run to last week, and badges
   not yet celebrated. It is not the plays list, and nothing in it is a record.
-- **Scores are read-only in the admin.** The phone's copy wins on the phone,
-  so an admin correction would leave his bests showing the old number.
+- **Scores are read-only in the admin and on the coach page.** The phone's
+  copy wins on the phone, so a correction anywhere else would leave his bests
+  showing the old number.
+- **His cards** (`/coach/`, `coach_cards`) is Dad's read-only view of what has
+  backed up: points (stamps plus the head start), level, goal weeks, best per
+  card (`deck_rules.card_bests`, one query: on a time card the fastest above 0)
+  and his plays, 50 a page. Old ticks are at `/coach/before/`. Read it signed
+  in as **staff** (`/admin/login/?next=/coach/`): `/api/plays/` refuses staff,
+  so Dad's phone can never put a play on Will's record. Signed in with Will's
+  PIN, any opening of `/` syncs that phone's plays onto him for good - so the
+  coach screens never lead to the PIN pad: signed out they go to the staff
+  sign-in (`COACH_SIGN_IN`), and their Sign out returns there. Staff get no
+  tab bar and no link to the deck. An old best on a card he has not played
+  yet is listed too, as on his phone.
+- **A refused play is logged** (`play refused: '<id>' (<reason>)`, a warning in
+  Render's logs) and kept on the phone. No score goes in the log. A stored,
+  viewable list is in the chart's fog.
 
 ## Badges
 
@@ -177,7 +194,7 @@ it is and reading it the same way every time.
   the same exercise as a card (`HISTORY_CARDS`). Per user - `request.user`,
   never `get_athlete()`. The per-tick figure and the cap may go up, never
   down. No medals come from old scores.
-- **Counts are editable on the Coach screen** (`/coach/`). `coach_log_edit` changes
+- **Counts are editable on Coach -> Before the cards** (`/coach/before/`). `coach_log_edit` changes
   the number or blanks it, and never deletes the row. A value that is not a
   count changes nothing - never wipes one. A count moves only his
   records on Before the cards and the three "from before" keepy-up bests -

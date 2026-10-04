@@ -14,25 +14,31 @@ from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout as auth_logout
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import HttpResponse
+from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
-from . import progress, throttle
-from .models import SessionLog, get_athlete
+from . import deck_rules, progress, throttle
+from .models import Play, SessionLog, get_athlete
 
-# There is one profile, and Dad is the only other person who touches this, so
-# the coach screens sit behind the same PIN rather than a second account. They
-# are simply kept off Will's tab bar.
+# The coach screens read Will's record through get_athlete() (one profile).
+# Dad reads them signed in as staff (leg 4): signed out, they send him to the
+# staff sign-in, never to Will's PIN pad - a PIN session on Dad's phone could
+# sync that phone's plays onto Will for good.
+COACH_SIGN_IN = "/admin/login/"
+
+
 def coach_required(view):
-    """Coach screens: same session, flagged so the chrome can adapt."""
+    """Coach screens: signed in, flagged so the chrome can adapt."""
 
     @wraps(view)
-    @login_required
+    @login_required(login_url=COACH_SIGN_IN)
     def wrapped(request, *args, **kwargs):
         request.in_coach = True
         return view(request, *args, **kwargs)
@@ -100,8 +106,15 @@ def _safe_next(request):
 
 @require_POST
 def logout_view(request):
-    """POST only: a link or a prefetch must never sign him out."""
+    """POST only: a link or a prefetch must never sign him out.
+
+    Signing out of the coach screens goes back to the staff sign-in, not to
+    Will's PIN pad.
+    """
+    from_coach = request.POST.get("from") == "coach"
     auth_logout(request)
+    if from_coach:
+        return redirect(f"{COACH_SIGN_IN}?next={reverse('training:coach_cards')}")
     return redirect("training:login")
 
 
@@ -172,6 +185,41 @@ def coach_log_edit(request, pk):
 
 
 @coach_required
+@require_GET
+def coach_cards(request):
+    """His cards: what has backed up from his phone, read-only (leg 4).
+
+    The phone's copy wins on the phone, so nothing here edits a play. Read it
+    signed in as staff: /api/plays/ refuses staff, so Dad's phone can never
+    put a play on Will's record.
+    """
+    athlete = get_athlete()
+    today = timezone.localdate()
+    summary, bests, page = None, [], None
+    if athlete:
+        summary = deck_rules.coach_summary(athlete, today)
+        bests = deck_rules.card_bests(athlete, summary["starting_bests"])
+        plays = (
+            Play.objects.filter(athlete=athlete)
+            .select_related("card")
+            .order_by("-date", "-played_at")
+        )
+        page = Paginator(plays, 50).get_page(request.GET.get("page"))
+    return render(
+        request,
+        "training/coach/cards.html",
+        {
+            "athlete": athlete,
+            "summary": summary,
+            "bests": bests,
+            "page": page,
+            "as_of": timezone.localtime(),
+            "coach_page": "cards",
+        },
+    )
+
+
+@coach_required
 def coach_logs(request):
     athlete = get_athlete()
     logs = []
@@ -184,7 +232,7 @@ def coach_logs(request):
     return render(
         request,
         "training/coach/logs.html",
-        {"logs": logs, "athlete": athlete},
+        {"logs": logs, "athlete": athlete, "coach_page": "before"},
     )
 
 

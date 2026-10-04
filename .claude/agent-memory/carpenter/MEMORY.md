@@ -4,4 +4,5 @@
 - [Deck leg 3b notes](deck_leg3b_notes.md) — kept badges: kept_badge_values home, import chain, verified, flagged.
 - [Deck leg 3c notes](deck_leg3c_notes.md) — switch-over: layout, dead code now vs 3d, flagged.
 - [Deck leg 3d notes](deck_leg3d_notes.md) — fixed plan retired: dead code left, test gaps, stale comments, flagged.
+- [Deck leg 4 notes](deck_leg4_notes.md) — coach "His cards" page: card_bests/coach_summary home, agreement with deck.js, flagged.
 - [Deck review notes](deck_review_notes.md) — deck.js/deck_views.py/deck_rules.py layout, deliberate choices, findings flagged in legs 1 and 2a.

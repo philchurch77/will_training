@@ -34,6 +34,8 @@ The deck words come from `docs/chart/deck.md`.
 - **Cards / Progress** - his two tabs since the switch-over (3c). Both are the one page at `/`, drawn by `deck.js`; Progress is `/#progress`.
 - **Before the cards** - the read-only page (`/before/`) of what he did on the fixed plan: best streak, totals, minutes per skill, records. The one name for the old app on his screens.
 - **Head start** - the points (and three bests) his old ticks give him on the deck, worked out live, written nowhere (3a).
+- **His cards** - the coach page at `/coach/`: what has backed up from his phone (points, level, goal weeks, best per card, plays), read-only.
+- **Refused play** - a play the server would not save. The phone keeps it and shows a count; the server logs its reason.
 - **Card-day** - one card played on one day, however many times. What a play counts as toward a kept badge, the same as one tick.
 - **Sync** - the phone sending plays it has not sent yet to `/api/plays/`, and downloading them back if it has lost its copy.
 

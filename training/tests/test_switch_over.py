@@ -157,8 +157,8 @@ class TestOfflineShellAfterSwitch:
     # phones would keep the old script. Bump this with every static change.
     def test_the_cache_was_bumped_past_the_switch(self, client, deck):
         body = self.sw(client)
-        assert "const CACHE = 'will-training-v26';" in body
-        assert "will-training-v25'" not in body
+        assert "const CACHE = 'will-training-v27';" in body
+        assert "will-training-v26'" not in body
 
     # Catches the shortcuts still pointing at the retired screens, or the id
     # moving and orphaning the icon on his phone.

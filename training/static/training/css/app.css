@@ -593,6 +593,9 @@ a.record:active { opacity: .7; }
    rather than dragging the whole page sideways. */
 .coach .table-wrap { overflow-x: auto; }
 .coach .small { font-size: 13px; }
+.coach-switch { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.coach .coach-lead { font-size: 19px; }
+.coach .nowrap { white-space: nowrap; }
 .coach th { color: var(--ink-3); font-size: 12px; text-transform: uppercase;
   letter-spacing: .06em; }
 .coach form.inline { display: inline; margin: 0; }

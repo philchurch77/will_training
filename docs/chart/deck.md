@@ -123,6 +123,23 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
     2. Back up as `db-backup-2026-10-04-pre3d.sqlite3`.
     3. Write down the row counts and the Before-the-cards figures.
     4. Merge. Re-check that every figure matches.
+- **Leg 4 decisions** (4 Oct 2026, Phil took every recommendation):
+  - *No badges on the coach page*: his Progress tab shows them.
+  - *`/coach/` is His cards*: old ticks move to `/coach/before/`, with a link to each on both pages.
+  - *Phil reads it signed in as staff*, never with Will's PIN, so his phone can never sync a play onto Will.
+  - *Refused plays are logged now*: a stored list stays in the fog.
+  - *Next to sail*: the User-admin delete guard.
+- **Leg 4 forced in build** (4 Oct 2026):
+  - The player level is now written twice (`deck_rules.player_level` and `levelFor`), noted in `CLAUDE.md`.
+  - The weekly line reads "N sessions (goal 3)", because "6 of 3" read as a mistake.
+  - `CACHE` is v27 for the coach switch's CSS.
+  - The coach screens never lead to Will's PIN pad. Signed out, they go to the staff sign-in, and their Sign out returns there (the Lookout's High).
+  - Staff get no tab bar and no link to the deck.
+  - The service worker never keeps `/coach/` or `/admin/`.
+  - The refusal log quotes the id.
+  - An old best on an unplayed card is listed, as on his phone.
+  - A 0 time reads "—".
+  - Left for Phil: make the coach screens staff-only (today any signed-in session, Will's included, can open them and edit an old count).
 - **Rewards are badges and medals, no real-world prizes**, and nothing rewards hours or days in a row on their own: pressure is the main reason children drop out.
 
 ## Legs
@@ -137,6 +154,7 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 | 3c | Switch over | 3b | The home-screen icon opens the deck (`/` renders it, never redirects); tabs Cards and Progress; streak, Perfect week, 500 minutes, Century into `RETIRED_BADGES` (Legend if earned); old Progress becomes read-only "Before the cards"; `clear_trial_plays` kept until 3d; skill blocks restart on switch-over Monday; CACHE bump and new precache list; tick endpoints stay live | Full crew; Purser and a disk backup before deploy; Lookout on a real phone offline | built 4 Oct 2026 on `deck-step-3c`; no migration; merge only after the clear has run on Render and a second dry run reads 0 |
 | 3d | Retire the fixed plan | 3c (grace waived by Phil, 4 Oct 2026) | Plan screens, `_seed_plan`, Today/drill/library views, `session.js`, tick endpoints, `drill_uncomplete`, `seed_drills --reset` and `clear_trial_plays` retired; drills stay seeded and inactive; CLAUDE.md rewritten; plan assertions in `test_seed.py` retired | Carpenter, Purser, Master-at-Arms, Gunner | built 4 Oct 2026 on `deck-step-3d`; no migration; merge after the phone and backup gate (see Leg 3d forced in build) |
 | 3d-ii | Tidy after the plan | 3d | README rewritten for the deck; dead CSS from the old screens removed | Carpenter, Bosun | open |
+| 4 | His cards on the coach page | 3d | Phil, signed in as staff, opens Coach to a read-only view of what has backed up: points, level, goal weeks, best per card, his plays; old ticks one tap away; refused plays logged | Quartermaster, Carpenter, Bosun, Master-at-Arms (Gauntlet light), Gunner, Lookout; no Purser (nothing written) | built 4 Oct 2026 on `deck-step-4`; no migration |
 
 ### Leg 2 detail, from the plan
 
@@ -187,7 +205,7 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 
 - Dropping the retired plan tables (`TrainingPlan`, `PlanDay`, `PlanDrill`) and the drill flags nothing reads (`is_combination`, `target_label`). Expand and contract, with a backup.
 - The stock User admin can still delete Will's user, which cascades to SessionLog, SessionClock and EarnedBadge (`Play.athlete` is PROTECT only once he has a play). Guard it, or record a retention decision.
-- A coach view of his plays, and of plays the server refused.
+- A stored, viewable list of plays the server refused (a model and migration; leg 4 logs each refusal).
 
 ## Out of scope
 

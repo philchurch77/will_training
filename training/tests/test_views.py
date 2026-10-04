@@ -14,6 +14,7 @@ pytestmark = pytest.mark.django_db
 
 CHILD_URLS = ["training:before_cards", "training:deck"]
 COACH_URLS = [
+    "training:coach_cards",
     "training:coach_logs",
 ]
 
@@ -79,14 +80,14 @@ class TestPinLogin:
 
 
 class TestCoachAccess:
-    """One profile means the coach screens sit behind the same code. They are
-    kept off Will's tab bar rather than behind a second account."""
+    """The coach screens read Will's record (one profile) and are read by Dad
+    signed in as staff; signed out, they lead to the staff sign-in."""
 
     @pytest.mark.parametrize("name", COACH_URLS)
-    def test_anonymous_is_sent_to_login(self, client, name):
+    def test_anonymous_is_sent_to_the_staff_sign_in(self, client, name):
         response = client.get(reverse(name))
         assert response.status_code == 302
-        assert reverse("training:login") in response["Location"]
+        assert response["Location"].startswith("/admin/login/?next=")
 
     @pytest.mark.parametrize("name", COACH_URLS)
     def test_a_signed_in_user_can_reach_them(self, client, will, seeded, name):
@@ -98,7 +99,7 @@ class TestCoachAccess:
         client.force_login(will)
         body = client.get(reverse("training:deck")).content.decode()
         tabbar = body.split('class="tabbar"')[1].split("</nav>")[0]
-        assert reverse("training:coach_logs") not in tabbar
+        assert reverse("training:coach_cards") not in tabbar
 
 
 class TestBeforeTheCards:
@@ -239,14 +240,14 @@ class TestChrome:
     def test_the_coach_link_is_offered_on_will_screens(self, client, will, seeded):
         client.force_login(will)
         body = client.get(reverse("training:deck")).content.decode()
-        assert reverse("training:coach_logs") in body
+        assert reverse("training:coach_cards") in body
 
     def test_but_not_repeated_on_the_coach_screens_themselves(
         self, client, will, seeded
     ):
         client.force_login(will)
-        body = client.get(reverse("training:coach_logs")).content.decode()
+        body = client.get(reverse("training:coach_cards")).content.decode()
         header = body.split("</header>")[0]
-        assert reverse("training:coach_logs") not in header
+        assert reverse("training:coach_cards") not in header
 
 

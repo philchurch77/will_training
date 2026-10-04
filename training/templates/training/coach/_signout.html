@@ -1,0 +1,5 @@
+<form method="post" action="{% url 'training:logout' %}" class="center mt">
+  {% csrf_token %}
+  <input type="hidden" name="from" value="coach">
+  <button type="submit" class="linkbtn">Sign out</button>
+</form>

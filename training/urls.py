@@ -24,8 +24,10 @@ urlpatterns = [
     path("offline/", views.offline, name="offline"),
     # What feeds the deck.
     path("api/plays/", deck_views.api_plays, name="api_plays"),
-    # Coach: his sessions before the cards, where a count can be corrected.
-    path("coach/", views.coach_logs, name="coach_logs"),
-    path("coach/logs/", RedirectView.as_view(url="/coach/", permanent=False)),
+    # Coach: his cards (read-only), and his sessions before the cards, where
+    # a count can still be corrected.
+    path("coach/", views.coach_cards, name="coach_cards"),
+    path("coach/before/", views.coach_logs, name="coach_logs"),
+    path("coach/logs/", RedirectView.as_view(url="/coach/before/", permanent=False)),
     path("coach/logs/<int:pk>/edit/", views.coach_log_edit, name="coach_log_edit"),
 ]
