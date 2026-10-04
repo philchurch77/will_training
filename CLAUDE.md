@@ -234,6 +234,18 @@ static/training/js/deck.js   everything he sees and does on /deck/
   them - `Badge.DECK_KINDS` keeps the two apart until leg 3. Gold medal and
   Record breaker trust the phone's stamps; `_parse_stamp` holds the checks
   that stay true whatever the targets become. Already earned stays earned.
+- **The kept old badges count ticks and card plays together** (leg 3b):
+  First session, 10/50/100 drills, All rounder, Two footed, Keepy-up king -
+  `Badge.KEPT_KINDS`. `progress.kept_badge_values` is the one place that adds
+  them up, and both a tick on Today (`award_badges`) and a deck sync
+  (`award_deck_badges`) award from it, each award in its own savepoint so a
+  race between the two never rolls back a tick - `progress.award` is the one
+  award step for both. One go on a card is a
+  *card-day* (`deck_rules.kept_counts_from_plays`): a different card on a day, free play
+  included, never the score. All rounder is the larger of skills tried and
+  packs played, never the sum. The deck's Badges screen shows every deck and
+  kept badge plus anything else he earned; old Progress still hides the deck
+  kinds until 3c.
 - **A deck session is 3 different cards on one day, free play included; a
   goal week is 3 sessions Mon-Sun.** This is the one rule written twice -
   `deck_rules.session_dates` and `weekStatus` in `deck.js`. Change both. The
@@ -243,8 +255,10 @@ static/training/js/deck.js   everything he sees and does on /deck/
   explicit list (empty until leg 3); a retired badge is never awarded again,
   and one he earned shows tagged Legend. `clear_trial_plays` is the only
   thing that removes an award: it deletes every active deck badge (Legends
-  are kept) and re-awards from
-  the plays left.
+  are kept) and re-awards from the plays left. Its delete stays bounded by
+  `DECK_KINDS` - **never widen it to the kept badges**: they were earned from
+  real ticks, a re-award rewrites every date, and one whose count fell since
+  would not come back. Run it before 3b reaches Render.
 - **His old app gives him a head start** (leg 3a), worked out from his
   SessionLog rows on every deck load by `deck_rules.history_for` and written
   nowhere: 5 points per drill he ticked, capped at 1000 (`starting_points`),
@@ -254,8 +268,8 @@ static/training/js/deck.js   everything he sees and does on /deck/
   go up, never down. No medals come from old scores: no old move drill was
   ever scored, so no level opens from history. Because it is live, unticking
   on Today or editing a count on His sessions moves it; stamps never change.
-- **`will-deck-server-v1`** caches what only the server knows - earned deck
-  badges (only ever added), the goal-week run to last week, and badges not
+- **`will-deck-server-v1`** caches what only the server knows - every badge
+  he has earned (only ever added), the goal-week run to last week, and badges not
   yet celebrated. It is not the plays list, and nothing in it is a record.
 - **The hand** is five cards from five packs: always one Moves card and one
   Quick feet or Combos card. It is the same all day until he deals again.

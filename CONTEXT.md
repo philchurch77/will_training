@@ -30,6 +30,8 @@ The deck words come from `docs/chart/deck.md`.
 - **Test card** - the test-week button that opens the six self-tests (2b). Not a Card row.
 - **Goal week** - a Mon-Sun week with 3 deck sessions (2b).
 - **Legend** - the tag on a retired badge he earned and keeps (2b).
+- **Kept badge** - an old-app badge that carries on with the deck: First session, 10/50/100 drills, All rounder, Two footed, Keepy-up king. Counts ticks and card plays together (3b). `Badge.KEPT_KINDS`.
+- **Card-day** - one card played on one day, however many times. What a play counts as toward a kept badge, the same as one tick.
 - **Sync** - the phone sending plays it has not sent yet to `/api/plays/`, and downloading them back if it has lost its copy.
 
 ## The existing app

@@ -376,6 +376,7 @@ class Badge(models.Model):
     # The deck's badges (leg 2b). Worked out on the server from Play rows by
     # deck_rules.deck_badge_values and awarded at sync - never by
     # progress.award_badges, and never shown on the old Progress page.
+    # DECK_KINDS also bounds clear_trial_plays: only these are ever cleared.
     GOAL_WEEKS_RUN = "goal_weeks_run"
     GOAL_WEEKS_TOTAL = "goal_weeks_total"
     MOVE_GOLDS = "move_golds"
@@ -403,6 +404,11 @@ class Badge(models.Model):
         GOAL_WEEKS_RUN, GOAL_WEEKS_TOTAL, MOVE_GOLDS, PERSONAL_BESTS,
         TEST_WEEKS, WEAK_FOOT_CLOSER, FREE_PLAYS,
     })
+    # The old badges kept through the switch-over (leg 3b). They count old
+    # ticks and card plays together - progress.kept_badge_values is the one
+    # place that adds them up - and both a tick on Today and a deck sync award
+    # them. Never cleared by clear_trial_plays: he earned them from real ticks.
+    KEPT_KINDS = frozenset({TOTAL_DRILLS, SKILLS_TRIED, WEAK_FOOT, JUGGLING})
 
     code = models.SlugField(max_length=40, unique=True)
     name = models.CharField(max_length=40)

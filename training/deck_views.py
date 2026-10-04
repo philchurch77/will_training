@@ -225,12 +225,15 @@ def _play_json(play):
 
 
 def _deck_badges_json(athlete):
-    """The deck's badge screen: every active deck badge, and any retired one
-    he earned (a Legend). Only his own awards."""
-    earned = {
-        eb.badge_id: eb.earned_on
-        for eb in EarnedBadge.objects.filter(athlete=athlete, badge__kind__in=Badge.DECK_KINDS)
-    }
+    """The deck's badge screen, every badge he has in one place (leg 3b):
+    each active deck or kept badge, earned or not, and any other badge he
+    earned - an old streak, or a retired one tagged Legend. An old badge he
+    has not earned is left out: the deck cannot award it, so "Not yet" would
+    be a promise it cannot keep. Only his own awards."""
+    earned = set(
+        EarnedBadge.objects.filter(athlete=athlete).values_list("badge_id", flat=True)
+    )
+    on_deck = Badge.DECK_KINDS | Badge.KEPT_KINDS
     return [
         {
             "code": badge.code,
@@ -240,15 +243,16 @@ def _deck_badges_json(athlete):
             "legend": not badge.is_active,
             "earned": badge.id in earned,
         }
-        for badge in Badge.objects.filter(kind__in=Badge.DECK_KINDS)
-        if badge.is_active or badge.id in earned
+        for badge in Badge.objects.all()
+        if badge.id in earned or (badge.is_active and badge.kind in on_deck)
     ]
 
 
 def _earned_codes(athlete):
+    """Every badge he has, so the phone's cache knows them as earned rather
+    than news - one won on Today is not celebrated again on the deck."""
     return list(
-        EarnedBadge.objects.filter(athlete=athlete, badge__kind__in=Badge.DECK_KINDS)
-        .values_list("badge__code", flat=True)
+        EarnedBadge.objects.filter(athlete=athlete).values_list("badge__code", flat=True)
     )
 
 

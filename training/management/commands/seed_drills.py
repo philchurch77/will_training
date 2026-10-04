@@ -955,7 +955,7 @@ PLAN_DAYS = [
 ]
 
 BADGES = [
-    ("first-session", "First session", "You did your first drill.", "\U0001f31f",
+    ("first-session", "First session", "You did your first drill or card.", "\U0001f31f",
      Badge.TOTAL_DRILLS, 1, 1),
     ("streak-3", "3 in a row", "Trained three days in a row.", "\U0001f525",
      Badge.STREAK, 3, 2),
@@ -963,19 +963,19 @@ BADGES = [
      Badge.STREAK, 7, 3),
     ("streak-30", "Month machine", "Thirty days in a row. Unbelievable.",
      "\U0001f680", Badge.STREAK, 30, 4),
-    ("drills-10", "10 drills", "Ten drills completed.", "✅",
+    ("drills-10", "10 drills", "Ten drills or cards done.", "✅",
      Badge.TOTAL_DRILLS, 10, 5),
-    ("drills-50", "50 drills", "Fifty drills completed.", "\U0001f3c5",
+    ("drills-50", "50 drills", "Fifty drills or cards done.", "\U0001f3c5",
      Badge.TOTAL_DRILLS, 50, 6),
-    ("drills-100", "100 drills", "One hundred drills. Proper dedication.",
+    ("drills-100", "100 drills", "One hundred drills or cards. Proper dedication.",
      "\U0001f451", Badge.TOTAL_DRILLS, 100, 7),
-    ("all-skills", "All rounder", "Tried every single skill category.",
+    ("all-skills", "All rounder", "Tried every skill, or played every pack of cards.",
      "\U0001f308", Badge.SKILLS_TRIED, 7, 8),
     ("minutes-500", "500 minutes", "Over eight hours of training.", "⏱️",
      Badge.TOTAL_MINUTES, 500, 9),
-    ("weak-foot-25", "Two footed", "Twenty five weak foot drills done.",
+    ("weak-foot-25", "Two footed", "Twenty five weak foot drills or cards done.",
      "\U0001f9a6", Badge.WEAK_FOOT, 25, 10),
-    ("juggling-25", "Keepy-up king", "Twenty five juggling drills done.",
+    ("juggling-25", "Keepy-up king", "Twenty five juggling drills or keepy-up cards done.",
      "\U0001f939", Badge.JUGGLING, 25, 11),
     # The two at the end are the long game. Everything above is reachable in
     # a month of preseason; these are still there to chase afterwards.

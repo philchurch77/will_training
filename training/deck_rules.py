@@ -210,7 +210,10 @@ def history_for(athlete):
 # _parse_stamp in deck_views.py holds the checks that stay true whatever the
 # targets become. See docs/chart/deck.md, "Leg 2b decisions".
 
-Row = namedtuple("Row", "date card move score weak_score medal bests")
+Row = namedtuple(
+    "Row", "date card move score weak_score medal bests pack per_foot",
+    defaults=("", False),
+)
 
 
 def session_dates(rows):
@@ -299,6 +302,33 @@ def deck_badge_values(rows):
     }
 
 
+def kept_counts_from_plays(rows):
+    """What his plays add to the kept old badges (leg 3b).
+
+    One go is a card-day - a different card on a day - which is exactly what
+    one tick was (one drill, one day), and playing the same card ten times in
+    an evening is one go, not ten. Free play is a go but not a pack for All
+    rounder, which leaves the seven scored packs. A score never enters it: 40
+    keepy-ups is one go, like an old tick. progress.kept_badge_values adds
+    these to his old counts; see docs/chart/deck.md, "Leg 3b decisions".
+    """
+    from .models import Badge, Card
+
+    # One go per card per day. Pack and per_foot belong to the card, so they
+    # ride along in the key without splitting a card-day in two.
+    card_days = {(r.date, r.card, r.pack, r.per_foot) for r in rows}
+    return {
+        Badge.TOTAL_DRILLS: len(card_days),
+        Badge.SKILLS_TRIED: len(
+            {pack for _, _, pack, _ in card_days if pack and pack != Card.FREE_PLAY}
+        ),
+        Badge.WEAK_FOOT: sum(
+            1 for _, card, _, per_foot in card_days if per_foot or card in WEAK_FOOT_CARDS
+        ),
+        Badge.JUGGLING: sum(1 for _, _, pack, _ in card_days if pack == Card.KEEPY_UPS),
+    }
+
+
 # --- reads and writes the database ------------------------------------------
 
 
@@ -310,7 +340,8 @@ def deck_rows(athlete):
     return [
         Row(*values)
         for values in Play.objects.filter(athlete=athlete).values_list(
-            "date", "card__slug", "card__move", "score", "weak_score", "medal", "bests"
+            "date", "card__slug", "card__move", "score", "weak_score", "medal", "bests",
+            "card__pack", "card__per_foot",
         )
     ]
 
@@ -320,28 +351,19 @@ def goal_weeks_for(athlete, today):
 
 
 def award_deck_badges(athlete, today):
-    """Award any deck badge newly earned. Returns the badges awarded now.
+    """Award any deck badge, or kept old badge, newly earned. Returns the
+    badges awarded now.
 
-    Never deletes or revokes: already earned stays earned. Each award is made
-    in its own savepoint, so two syncs racing to award the same badge leave
-    one row and no error - the unique constraint decides, never a get().
+    The kept badges count old ticks and card plays together, through
+    progress.kept_badge_values - the same numbers a tick on Today awards
+    them from, so the two paths cannot disagree. Never deletes or revokes;
+    progress.award is the one award step, savepoint and all.
     """
-    from django.db import IntegrityError, transaction
+    from .models import Badge
+    # Lazy: progress imports this module at the top, so the reverse import
+    # must wait until it is called.
+    from .progress import award, kept_badge_values
 
-    from .models import Badge, EarnedBadge
-
-    values = deck_badge_values(deck_rows(athlete))
-    already = set(
-        EarnedBadge.objects.filter(athlete=athlete).values_list("badge_id", flat=True)
-    )
-    newly = []
-    for badge in Badge.objects.filter(is_active=True, kind__in=Badge.DECK_KINDS):
-        if badge.id in already or values.get(badge.kind, 0) < badge.threshold:
-            continue
-        try:
-            with transaction.atomic():
-                EarnedBadge.objects.create(athlete=athlete, badge=badge, earned_on=today)
-        except IntegrityError:
-            continue
-        newly.append(badge)
-    return newly
+    rows = deck_rows(athlete)
+    values = {**deck_badge_values(rows), **kept_badge_values(athlete, rows)}
+    return award(athlete, values, Badge.DECK_KINDS | Badge.KEPT_KINDS, today)

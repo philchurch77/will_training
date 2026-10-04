@@ -73,6 +73,22 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
   - *(3c)* Two tabs, Cards and Progress; Progress shows his badges and links to a read-only "Before the cards" page; the Drills tab goes. The skill of the week restarts on the switch-over Monday.
   - *Deploy order:* back up, deploy 2a+2b; deploy 3a; run `clear_trial_plays` and clear site data on every trial phone; deploy 3b, then 3c.
 - **Leg 3a forced in build** (4 Oct 2026): the level panel says "Includes N points from your training so far"; an old best not yet beaten on the card shows "(from before)"; the head start is live, so an untick or a count edited on His sessions moves it - stamps never change. For 3c: pick one phrase for the old app ("before the cards" vs "your training so far") to match the "Before the cards" page.
+- **Leg 3b decisions** (4 Oct 2026, Phil took every recommendation):
+  - *One go on a card is a card-day*: a different card on a day, however many times he plays it - exactly what one tick was.
+  - *Free play counts* toward First session and 10/50/100 drills, once a day; it is not a pack for All rounder.
+  - *All rounder* is the larger of old skills tried and scored packs played (7), never the sum.
+  - *Badge names kept*, descriptions reworded ("Ten drills or cards done.").
+  - *The deck's Badges screen* lists every deck and kept badge, earned or not, plus any other badge he earned; never an unearned old one like Century.
+  - *Built on its own branch* (`deck-step-3b`, off `ac8db55`), so merging 3a cannot carry it to Render before the clear.
+- **Leg 3b forced in build** (4 Oct 2026):
+  - Both a tick and a sync award the kept badges from `progress.kept_badge_values`, through one award step (`progress.award`, a savepoint per award).
+  - A badge error is logged and never costs a tick, as it already never cost a play.
+  - `clear_trial_plays` stays bounded by `DECK_KINDS`. Its dry run flags any kept badge his ticks and later plays alone do not reach, for checking by hand; that is a backstop, not a gate.
+  - **Deploy gate for 3b:** after the clear and clearing every trial phone's site data, re-run the dry run with the same `--through` and see **0 plays**. Re-count `training_sessionlog` (unchanged) and `training_earnedbadge` (deck kinds only may differ). Then merge 3b.
+  - Nobody plays cards on Render under his account until 3c.
+  - For 3c:
+    - the old Progress "Drills done ever" tile counts ticks only while the drill badges beside it count cards too - combine it or label it on the "Before the cards" page;
+    - a badge awarded by a late offline tick carries the tick's date, one awarded at sync carries the server's.
 - **Rewards are badges and medals, no real-world prizes**, and nothing rewards hours or days in a row on their own: pressure is the main reason children drop out.
 
 ## Legs
@@ -83,7 +99,7 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 | 2a | Scores that mean something | 1 | Points on every play, player levels, medals, move levels that unlock on gold, the sticker album, skill of the week - all offline | Quartermaster, Carpenter, Bosun, Master-at-Arms (API accepts more), Purser (0009), Gunner, Lookout | built 3 Oct 2026 on `deck-step-2`; deploy carries migration 0009 (back up first) |
 | 2b | Goals and badges | 2a | The weekly goal bar, weeks in a row, test week, the new badges awarded at sync, the Legend tag on retired badges | Quartermaster, Carpenter, Bosun, Master-at-Arms, Purser (0010 rebuilds the badge table), Gunner, Lookout | built 4 Oct 2026 on `deck-step-2b`; deploy with 2a carries 0009 + 0010 (back up first) |
 | 3a | Head start | 2b | His player level counts his old sessions and three keepy-up cards show his old best to beat - on /deck/, still off his tab bar | Quartermaster, Carpenter, Bosun, Master-at-Arms (light), Gunner, Lookout; no Purser (nothing written) | built 4 Oct 2026 on `deck-step-3`; no migration |
-| 3b | Badges in one place | 3a, and `clear_trial_plays` run on Render | The kept old badges count old ticks and card plays together, awarded at sync; the deck's Badges screen shows every badge he has; `DECK_KINDS` display split ends | Carpenter, Bosun, Master-at-Arms, Purser, Gunner, Lookout | open |
+| 3b | Badges in one place | 3a, and `clear_trial_plays` run on Render | The kept old badges count old ticks and card plays together, awarded at sync; the deck's Badges screen shows every badge he has; `DECK_KINDS` display split ends | Carpenter, Bosun, Master-at-Arms, Purser, Gunner, Lookout | built 4 Oct 2026 on `deck-step-3b`; no migration; merge only after the clear and the 0-plays dry run (see Leg 3b forced in build) |
 | 3c | Switch over | 3b | The home-screen icon opens the deck (`/` renders it, never redirects); tabs Cards and Progress; streak, Perfect week, 500 minutes, Century into `RETIRED_BADGES` (Legend if earned); old Progress becomes read-only "Before the cards"; `clear_trial_plays` deleted; skill blocks restart on switch-over Monday; CACHE bump and new precache list; tick endpoints stay live | Full crew; Purser and a disk backup before deploy; Lookout on a real phone offline | open |
 | 3d | Retire the fixed plan | 3c + about two weeks' grace | Plan screens, `_seed_plan`, Today/drill/library views, `session.js`, tick endpoints, `drill_uncomplete` and `seed_drills --reset` retired; drills stay seeded and inactive; CLAUDE.md rewritten; plan assertions in `test_seed.py` retired | Carpenter, Purser, Master-at-Arms, Gunner | open |
 
