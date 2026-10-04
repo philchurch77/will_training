@@ -28,6 +28,7 @@ from training.deck_rules import (
     Row,
     calendar,
     deck_badge_values,
+    history_for,
     goal_mondays,
     goal_weeks_json,
     goal_weeks_run,
@@ -344,3 +345,142 @@ class TestTestCardsExist:
         assert closer in TEST_CARDS
         assert Card.objects.get(slug=closer).per_foot is True
         assert FREE_PLAY in active
+
+
+# --- leg 3a: the head start from his old app ----------------------------------
+
+# The head start as first shipped. Either may go up; neither may come down.
+HEAD_START_FLOORS = {"per_tick": 5, "cap": 1000}
+
+
+def history_drill(skill, slug, is_active=True):
+    from training.models import Drill
+
+    return Drill.objects.create(
+        name=slug, slug=slug, skill=skill, instructions="Juggle.",
+        cue="Toes up", target_reps=30, is_active=is_active,
+    )
+
+
+def logs(athlete, drill, count, start=date(2026, 1, 1), **fields):
+    """`count` SessionLog rows, one a day, so the unique constraint holds."""
+    from training.models import SessionLog
+
+    SessionLog.objects.bulk_create(
+        SessionLog(athlete=athlete, drill=drill, date=start + timedelta(days=n), **fields)
+        for n in range(count)
+    )
+
+
+class TestHeadStartPure:
+    # Catches the per-tick rate or the cap being applied wrongly: no ticks
+    # must be no points, and the cap must hold however long his history.
+    @pytest.mark.parametrize(
+        "ticks, expected", [(0, 0), (3, 15), (200, 1000), (201, 1000), (10_000, 1000)]
+    )
+    def test_starting_points_is_five_a_tick_up_to_the_cap(self, ticks, expected):
+        assert deck_rules.starting_points(ticks) == expected
+
+    # Catches an old drill with a different count (laces-only) becoming a
+    # best on a card, or a 0 becoming a best that any score then "beats".
+    def test_starting_bests_drops_unmapped_drills_and_zeros(self):
+        assert deck_rules.starting_bests({
+            "thigh-juggles": 14,
+            "weak-foot-juggles": 0,
+            "alternate-foot-juggles": None,
+            "juggling-laces": 50,
+        }) == {"keepy-ups-thighs": {"score": 14, "weak": None}}
+
+    # Catches the head start being lowered after he has seen it: a lower
+    # rate or cap can take a level off him.
+    def test_the_head_start_numbers_never_go_down(self):
+        assert deck_rules.STARTING_POINTS_PER_TICK >= HEAD_START_FLOORS["per_tick"], (
+            "lowering the head start takes points off him"
+        )
+        assert deck_rules.STARTING_POINTS_CAP >= HEAD_START_FLOORS["cap"], (
+            "lowering the head start takes points off him"
+        )
+
+    # Catches the existing callers of rules_json() (no history) handing the
+    # phone a missing key or a head start nobody earned.
+    def test_rules_json_without_history_starts_from_nothing(self):
+        rules = rules_json(date(2026, 10, 14))
+        assert rules["starting_points"] == 0
+        assert rules["starting_bests"] == {}
+
+
+@pytest.mark.django_db
+class TestHistoryFor:
+    # Catches unticked rows (completed=False) earning points, or the rate
+    # drifting from five a tick.
+    def test_only_completed_ticks_earn_points(self, will, drill):
+        logs(will, drill, 5)
+        logs(will, drill, 3, start=date(2025, 1, 1), completed=False)
+        assert history_for(will)["points"] == 25
+
+    # Catches the cap not holding against a long history.
+    def test_points_stop_at_the_cap(self, will, drill):
+        logs(will, drill, 300)
+        assert history_for(will)["points"] == 1000
+
+    # Catches the best being the latest or the first count instead of the
+    # highest, a 0 being a best, or an unticked row's count being his best.
+    def test_the_best_is_his_highest_ticked_count(self, will, skill):
+        thighs = history_drill(skill, "thigh-juggles")
+        weak = history_drill(skill, "weak-foot-juggles")
+        logs(will, thighs, 1, start=date(2026, 3, 1), actual_reps=12)
+        logs(will, thighs, 1, start=date(2026, 3, 2), actual_reps=31)
+        logs(will, thighs, 1, start=date(2026, 3, 3), actual_reps=20)
+        logs(will, thighs, 1, start=date(2026, 3, 4), actual_reps=99, completed=False)
+        logs(will, weak, 2, start=date(2026, 3, 1), actual_reps=0)
+        assert history_for(will)["bests"] == {
+            "keepy-ups-thighs": {"score": 31, "weak": None}
+        }
+
+    # Catches an old drill that counts something else (laces only) setting a
+    # best on a card it is not the same exercise as.
+    def test_an_unmapped_rep_drill_gives_no_best(self, will, skill, rep_drill):
+        laces = history_drill(skill, "juggling-laces")
+        logs(will, laces, 1, actual_reps=60)
+        logs(will, rep_drill, 1, actual_reps=60)
+        history = history_for(will)
+        assert history["bests"] == {}
+        assert history["points"] == 10
+
+    # Catches retiring a drill silently taking his history with it: the
+    # rows are his sessions all the same.
+    def test_a_retired_mapped_drill_still_counts(self, will, skill):
+        retired = history_drill(skill, "alternate-foot-juggles", is_active=False)
+        logs(will, retired, 2, actual_reps=17)
+        assert history_for(will) == {
+            "points": 10,
+            "bests": {"keepy-ups-alternate": {"score": 17, "weak": None}},
+        }
+
+    # Catches a query per log creeping in: the deck page loads this on
+    # every visit, and his history only grows.
+    @pytest.mark.parametrize("count", [1, 50])
+    def test_the_query_count_does_not_grow_with_his_history(
+        self, will, skill, count, django_assert_num_queries
+    ):
+        thighs = history_drill(skill, "thigh-juggles")
+        logs(will, thighs, count, actual_reps=5)
+        with django_assert_num_queries(2):
+            history_for(will)
+
+
+@pytest.mark.django_db
+class TestHistoryCardsMatchTheData:
+    # Catches a mapped old drill being renamed or turned into a minutes
+    # drill (no count, so no best), or a mapped card retired, made per foot
+    # (a single score would land on the wrong foot), or scored by time (a
+    # count compared as tenths of a second).
+    def test_every_mapping_is_a_seeded_rep_drill_onto_a_single_count_card(self, seeded):
+        from training.models import Drill
+
+        for drill_slug, card_slug in deck_rules.HISTORY_CARDS.items():
+            old = Drill.objects.get(slug=drill_slug)
+            assert old.target_reps is not None and old.duration_minutes is None, drill_slug
+            card = Card.objects.active().get(slug=card_slug)
+            assert card.per_foot is False, card_slug
+            assert card.scoring == Card.COUNT, card_slug

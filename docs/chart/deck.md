@@ -62,6 +62,17 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
   - *The kept old badges* stay on Progress until leg 3; the deck's badge screen shows deck badges and Legends.
   - *Badges and earned badges cannot be deleted in the admin*; `EarnedBadge.badge` is CASCADE.
 - **Leg 2b decisions forced in build** (4 Oct 2026): badges are checked on every sync that holds his plays, and a badge going wrong is logged, never a 500; a medal needs a score above 0 (both feet on a per-foot card); Weak foot closer counts once per test week; `clear_trial_plays` keeps retired (Legend) deck badges; on a Monday before the phone syncs, weeks in a row is rolled on from his own plays; the album and badges links sit under the cards and the Test week row leads the hand.
+- **Leg 3 split in four** (4 Oct 2026, Phil agreed): 3a head start, 3b badges in one place, 3c switch over, 3d retire the fixed plan. Will keeps using Today until 3c and is never without a working app.
+- **Leg 3 decisions** (4 Oct 2026, Phil took every recommendation):
+  - *Head-start points:* 5 per old drill he ticked, capped at 1000 (starts him at First Team). May go up, never down, once he has seen it.
+  - *Starting bests:* only the three old drills that are the same exercise as a card - thigh-juggles to keepy-ups-thighs, weak-foot-juggles to keepy-ups-weak, alternate-foot-juggles to keepy-ups-alternate. Laces juggling is not "any way you like"; an unfair best is worse than none.
+  - *No medals from old scores.* No old move drill ever had a score, so there is no old gold to carry and no move level opens from history (closes the 2a fog item).
+  - *Unticking on Today lowers the head start by 5* while he is under the cap: a same-day undo of his own, accepted until 3d retires the tick endpoints.
+  - *The head start is worked out on every load* from his SessionLog rows, written nowhere, so it can never be wrong and still counts days he trains on Today before the switch.
+  - *(3b)* The kept badges count old work and card plays together; anything earned stays.
+  - *(3c)* Two tabs, Cards and Progress; Progress shows his badges and links to a read-only "Before the cards" page; the Drills tab goes. The skill of the week restarts on the switch-over Monday.
+  - *Deploy order:* back up, deploy 2a+2b; deploy 3a; run `clear_trial_plays` and clear site data on every trial phone; deploy 3b, then 3c.
+- **Leg 3a forced in build** (4 Oct 2026): the level panel says "Includes N points from your training so far"; an old best not yet beaten on the card shows "(from before)"; the head start is live, so an untick or a count edited on His sessions moves it - stamps never change. For 3c: pick one phrase for the old app ("before the cards" vs "your training so far") to match the "Before the cards" page.
 - **Rewards are badges and medals, no real-world prizes**, and nothing rewards hours or days in a row on their own: pressure is the main reason children drop out.
 
 ## Legs
@@ -71,7 +82,10 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 | 1 | The deck, saved on the phone | — | Phil, from the coach screen, opens /deck/, is dealt a hand, plays cards with the stepper, stopwatch and timed bar, sees records update - all with no signal, synced to Render when signal returns | Quartermaster, Carpenter, Bosun, Master-at-Arms (new API), Purser (migration 0008, plays), Gunner, Lookout | built 3 Oct 2026 on `deck-step-1`; to try on Render (offline needs HTTPS), then `clear_trial_plays` before hand-over |
 | 2a | Scores that mean something | 1 | Points on every play, player levels, medals, move levels that unlock on gold, the sticker album, skill of the week - all offline | Quartermaster, Carpenter, Bosun, Master-at-Arms (API accepts more), Purser (0009), Gunner, Lookout | built 3 Oct 2026 on `deck-step-2`; deploy carries migration 0009 (back up first) |
 | 2b | Goals and badges | 2a | The weekly goal bar, weeks in a row, test week, the new badges awarded at sync, the Legend tag on retired badges | Quartermaster, Carpenter, Bosun, Master-at-Arms, Purser (0010 rebuilds the badge table), Gunner, Lookout | built 4 Oct 2026 on `deck-step-2b`; deploy with 2a carries 0009 + 0010 (back up first) |
-| 3 | Switch over | 2 | The deck becomes the home screen; old history shown read-only and converted into starting points and personal bests; the fixed plan screens retired | Full crew; Purser and a disk backup before deploy | open |
+| 3a | Head start | 2b | His player level counts his old sessions and three keepy-up cards show his old best to beat - on /deck/, still off his tab bar | Quartermaster, Carpenter, Bosun, Master-at-Arms (light), Gunner, Lookout; no Purser (nothing written) | built 4 Oct 2026 on `deck-step-3`; no migration |
+| 3b | Badges in one place | 3a, and `clear_trial_plays` run on Render | The kept old badges count old ticks and card plays together, awarded at sync; the deck's Badges screen shows every badge he has; `DECK_KINDS` display split ends | Carpenter, Bosun, Master-at-Arms, Purser, Gunner, Lookout | open |
+| 3c | Switch over | 3b | The home-screen icon opens the deck (`/` renders it, never redirects); tabs Cards and Progress; streak, Perfect week, 500 minutes, Century into `RETIRED_BADGES` (Legend if earned); old Progress becomes read-only "Before the cards"; `clear_trial_plays` deleted; skill blocks restart on switch-over Monday; CACHE bump and new precache list; tick endpoints stay live | Full crew; Purser and a disk backup before deploy; Lookout on a real phone offline | open |
+| 3d | Retire the fixed plan | 3c + about two weeks' grace | Plan screens, `_seed_plan`, Today/drill/library views, `session.js`, tick endpoints, `drill_uncomplete` and `seed_drills --reset` retired; drills stay seeded and inactive; CLAUDE.md rewritten; plan assertions in `test_seed.py` retired | Carpenter, Purser, Master-at-Arms, Gunner | open |
 
 ### Leg 2 detail, from the plan
 
@@ -115,7 +129,6 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 - How old minutes, ticks and per-drill counts convert into starting points and personal bests (leg 3).
 - What `CLAUDE.md` rules retire with the fixed plan at the switch-over, and the `test_seed.py` assertions that go with them (leg 3).
 - `clear_trial_plays` must be deleted in leg 3, once every play is his.
-- **For leg 3:** converting his old history must stamp medals as well as points, or his past gold never opens a level. Plays saved before 2a are unstamped and count for nothing.
 - A coach-facing view of plays the server refused, with the reason; today only a count shows on the phone.
 - Whether the phone's plays should be keyed per user; for now the staff 403 stands in for it.
 - Paging `GET /api/plays/` after a few seasons of plays.

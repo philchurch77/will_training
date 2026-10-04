@@ -116,8 +116,13 @@ def calendar(from_day, weeks=CALENDAR_WEEKS):
     return out
 
 
-def rules_json(today):
-    """Everything the phone needs to stamp plays and draw the game."""
+def rules_json(today, history=None):
+    """Everything the phone needs to stamp plays and draw the game.
+
+    `history` is history_for(athlete): his head start from the old app.
+    Without it, he starts from nothing.
+    """
+    history = history or {"points": 0, "bests": {}}
     return {
         "points": POINTS,
         "weak_foot_cards": WEAK_FOOT_CARDS,
@@ -129,9 +134,70 @@ def rules_json(today):
         # A week back, so a phone whose clock sits either side of midnight on
         # a Monday still finds its week.
         "calendar": calendar(today - timedelta(weeks=1)),
-        # Where leg 3 puts the points his old history converts into.
-        "starting_points": 0,
+        # His head start from the old app (leg 3a): points for the drills he
+        # ticked, and his old best on the cards that are the same exercise.
+        "starting_points": history["points"],
+        "starting_bests": history["bests"],
     }
+
+
+# --- the head start: his old app's history ----------------------------------
+# Worked out from his SessionLog rows every time the deck loads and written
+# nowhere, so it cannot be got wrong and days he trains on Today before the
+# switch-over still count. See docs/chart/deck.md, "Leg 3 decisions".
+
+# Points per old drill he ticked, and the most the old app can give him. Once
+# he has seen his head start these may go up, never down: lowering either
+# could take a level off him. Unticking a drill on Today (drill_uncomplete
+# deletes the row) lowers it by 5 below the cap - a same-day undo of his own,
+# accepted, and gone when 3d retires the tick endpoints. The same goes for
+# his inherited best: a count edited on Coach -> His sessions, or unticked,
+# moves the number shown on the card. Stamps already made never change.
+STARTING_POINTS_PER_TICK = 5
+STARTING_POINTS_CAP = 1000
+
+# The only old drills that are the same exercise as a card, so his old best
+# is a fair score to beat. Everything else either has no count, or counts
+# something different (laces-only juggling is not "any way you like").
+HISTORY_CARDS = {
+    "thigh-juggles": "keepy-ups-thighs",
+    "weak-foot-juggles": "keepy-ups-weak",
+    "alternate-foot-juggles": "keepy-ups-alternate",
+}
+
+
+def starting_points(ticks):
+    return min(ticks * STARTING_POINTS_PER_TICK, STARTING_POINTS_CAP)
+
+
+def starting_bests(drill_bests):
+    """{old drill slug: best count} to {card slug: {"score", "weak"}}.
+
+    The three mapped cards are not per foot, so the best is the score. A 0 is
+    never a best to beat.
+    """
+    return {
+        HISTORY_CARDS[slug]: {"score": best, "weak": None}
+        for slug, best in drill_bests.items()
+        if slug in HISTORY_CARDS and best
+    }
+
+
+def history_for(athlete):
+    """His head start. Two queries, whatever the size of his history; drills
+    since retired still count - they are his sessions all the same."""
+    from django.db.models import Max
+
+    from .models import SessionLog
+
+    logs = SessionLog.objects.filter(athlete=athlete, completed=True)
+    bests = dict(
+        logs.filter(drill__slug__in=HISTORY_CARDS, actual_reps__gt=0)
+        .values("drill__slug")
+        .annotate(best=Max("actual_reps"))
+        .values_list("drill__slug", "best")
+    )
+    return {"points": starting_points(logs.count()), "bests": starting_bests(bests)}
 
 
 # --- history: sessions, goal weeks, badges ----------------------------------

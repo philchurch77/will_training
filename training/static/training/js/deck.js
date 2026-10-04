@@ -218,7 +218,10 @@
 
   // His best on a card, per foot, from every play the phone holds.
   function bestsFor(card, plays) {
-    var best = { score: null, weak: null };
+    // Starts from his old app's best on the same exercise, when there is one
+    // (deck_rules.HISTORY_CARDS), so beating it is a real personal best.
+    var start = RULES && RULES.starting_bests && RULES.starting_bests[card.slug];
+    var best = { score: start ? start.score : null, weak: start ? start.weak : null };
     plays.forEach(function (play) {
       if (play.card !== card.slug) { return; }
       if (counts(card, play.score) && beats(card, play.score, best.score)) {
@@ -559,6 +562,10 @@
       ]),
       level.next ? el('div', { class: 'bar-track deck-bar', role: 'img', 'aria-label': 'On the way to ' + level.next }, [fill]) : null,
       el('p', { class: 'deck-next', text: level.next ? 'Next: ' + level.next : 'Top level. Legend!' }),
+      RULES.starting_points > 0
+        ? el('p', { class: 'deck-next', text: 'Includes ' + RULES.starting_points +
+          (RULES.starting_points === 1 ? ' point' : ' points') + ' from your training so far.' })
+        : null,
       skill ? el('p', { class: 'deck-skill' }, [
         'Skill of the week: ', el('strong', { text: moveName(skill) }), '. Double points.'
       ]) : null,
@@ -961,7 +968,12 @@
       return el('p', { class: 'deck-best', text: 'No score yet. This one sets it.' });
     }
     if (!card.per_foot) {
-      return el('p', { class: 'deck-best', text: 'Your best: ' + scoreText(card, best.score) });
+      // Still his old app's best, not yet beaten on the card: say so, or a
+      // number on a card he has never played looks like a mistake.
+      var start = RULES && RULES.starting_bests && RULES.starting_bests[card.slug];
+      var fromBefore = start && best.score === start.score;
+      return el('p', { class: 'deck-best', text: 'Your best: ' + scoreText(card, best.score) +
+        (fromBefore ? ' (from before)' : '') });
     }
     // A line each, so the two never wrap into one another on a small phone.
     var shown = function (v) { return v === null ? '-' : scoreText(card, v); };

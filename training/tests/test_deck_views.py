@@ -692,6 +692,35 @@ class TestDeckScript:
         assert not re.search(r"s\.unseen\s*=\s*\[\]", body)
 
 
+    # --- leg 3a: the head start ---
+
+    # Catches bestsFor starting from nothing: his old best would never be
+    # the score to beat and the first play would claim a "New best!".
+    def test_bests_start_from_the_old_apps_best(self):
+        body = self.function_body("bestsFor")
+        assert "RULES.starting_bests[card.slug]" in body
+        assert "score: start ? start.score : null" in body
+
+    # Catches the "(from before)" label going, so a number on a card he has
+    # never played looks like a mistake; or spreading to per-foot cards,
+    # which carry no old best.
+    def test_best_line_says_from_before_only_on_a_single_score_card(self):
+        body = self.function_body("bestLine")
+        assert "RULES.starting_bests[card.slug]" in body
+        assert "best.score === start.score" in body
+        assert "(fromBefore ? ' (from before)' : '')" in body
+        assert body.index("if (!card.per_foot)") < body.index("(from before)")
+
+    # Catches the head-start line showing "Includes 0 points" to an account
+    # with no history, or vanishing for one with a head start.
+    def test_the_game_strip_names_the_head_start_only_when_there_is_one(self):
+        body = self.function_body("gameStrip")
+        assert re.search(
+            r"RULES\.starting_points > 0 \? el\(.*?from your training so far\.' \}\) : null,",
+            body,
+        )
+
+
 # --- I. leg 2b: badges at sync, one user's own ---------------------------------
 
 
@@ -883,3 +912,96 @@ class TestStampCrossChecks:
         p = play("chop-1", score=14, weak_score=12, **stamp)
         post(client, [p])
         assert stored_stamp(p["id"]) == stamp
+
+
+# --- J. leg 3a: the head start, one user's own --------------------------------
+
+
+def rules_in(response):
+    match = re.search(
+        r'<script id="deck-rules" type="application/json">(.*?)</script>',
+        response.content.decode(), re.S,
+    )
+    assert match, "the rules are no longer baked into the page as deck-rules"
+    return json.loads(match.group(1))
+
+
+@pytest.fixture
+def history_drills(db):
+    """The three old drills that map onto cards, as rep drills."""
+    from training.models import Drill, Skill
+
+    skill = Skill.objects.get_or_create(
+        slug="first-touch", defaults={"name": "First touch", "order": 2}
+    )[0]
+    return {
+        slug: Drill.objects.create(
+            name=slug, slug=slug, skill=skill, instructions="Juggle.",
+            cue="Toes up", target_reps=30,
+        )
+        for slug in ("thigh-juggles", "weak-foot-juggles", "alternate-foot-juggles")
+    }
+
+
+def tick(athlete, drill, days, reps):
+    from training.models import SessionLog
+
+    start = timezone.localdate() - timedelta(days=400)
+    for n in range(days):
+        SessionLog.objects.create(
+            athlete=athlete, drill=drill, date=start + timedelta(days=n), actual_reps=reps
+        )
+
+
+class TestDeckHeadStartIsolation:
+    # Catches history_for reading every athlete's logs, or the view passing
+    # anyone but request.user: each deck must carry its own head start.
+    def test_each_deck_carries_only_its_own_users_head_start(
+        self, client, deck, will, other, history_drills
+    ):
+        tick(will, history_drills["thigh-juggles"], 3, reps=12)
+        tick(other, history_drills["weak-foot-juggles"], 7, reps=40)
+
+        client.force_login(will)
+        mine = rules_in(client.get(reverse("training:deck")))
+        assert mine["starting_points"] == 15
+        assert mine["starting_bests"] == {"keepy-ups-thighs": {"score": 12, "weak": None}}
+
+        client.force_login(other)
+        theirs = rules_in(client.get(reverse("training:deck")))
+        assert theirs["starting_points"] == 35
+        assert theirs["starting_bests"] == {"keepy-ups-weak": {"score": 40, "weak": None}}
+
+    # Catches the coach account being handed Will's history (get_athlete()
+    # in place of request.user, say).
+    def test_a_staff_account_gets_no_head_start_from_wills_logs(
+        self, client, deck, will, history_drills
+    ):
+        tick(will, history_drills["thigh-juggles"], 3, reps=12)
+        staff = get_user_model().objects.create_user(
+            username="phil", password="x", is_staff=True
+        )
+        client.force_login(staff)
+        rules = rules_in(client.get(reverse("training:deck")))
+        assert rules["starting_points"] == 0
+        assert rules["starting_bests"] == {}
+
+    # Catches a fresh account with no logs being handed someone else's
+    # head start, or a key going missing when there is nothing to give.
+    def test_an_account_with_no_logs_starts_from_nothing(
+        self, client, deck, will, other, history_drills
+    ):
+        tick(will, history_drills["alternate-foot-juggles"], 2, reps=9)
+        client.force_login(other)
+        rules = rules_in(client.get(reverse("training:deck")))
+        assert rules["starting_points"] == 0
+        assert rules["starting_bests"] == {}
+
+
+class TestDeckServiceWorkerHeadStart:
+    # Catches leg 3a's deck.js shipping under 2b's cache name: phones would
+    # keep the script that ignores the head start.
+    def test_the_cache_was_bumped_for_the_head_start(self, client, deck):
+        body = client.get("/sw.js").content.decode()
+        for old in ("v21", "v22", "v23"):
+            assert f"const CACHE = 'will-training-{old}';" not in body

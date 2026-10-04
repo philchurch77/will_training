@@ -3,4 +3,5 @@
 - [Deck leg 1 decisions](decisions_deck.md) — localStorage keys, hand rule, CSRF-from-cookie sync, SW must skip /api/, card-meaning changes need a new slug.
 - [Deck leg 2 decisions](decisions_deck_leg2.md) — per-play stamps (points/medal/bests), rules baked from Python, badges at sync, 2a/2b split.
 - [Deck leg 2b decisions](decisions_deck_leg2b.md) — trust stamps for Gold/Record breaker, clear_trial_plays re-awards, goal_weeks wire shape, 0010.
+- [Deck leg 3 decisions](decisions_deck_leg3.md) — cut 3a-3d, head start computed live, only 3 drills map to cards, no past gold exists, "/" must render.
 - [The developer's coaching voice](user_coaching_voice.md) — his drill lists are coaching briefs; expect duplicates and naming collisions, and say so.

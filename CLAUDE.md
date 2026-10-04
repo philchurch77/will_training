@@ -26,7 +26,7 @@ uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see b
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
 uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, before hand-over only
-uv run pytest                    # 451 tests, ~6 min (3 Today tests fail on Sundays)
+uv run pytest                    # 474 tests, ~10 min (3 Today tests fail on Sundays)
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -245,6 +245,15 @@ static/training/js/deck.js   everything he sees and does on /deck/
   thing that removes an award: it deletes every active deck badge (Legends
   are kept) and re-awards from
   the plays left.
+- **His old app gives him a head start** (leg 3a), worked out from his
+  SessionLog rows on every deck load by `deck_rules.history_for` and written
+  nowhere: 5 points per drill he ticked, capped at 1000 (`starting_points`),
+  and his old best on the three drills that are the same exercise as a card
+  (`HISTORY_CARDS`, `starting_bests`). Per user - `request.user`, never
+  `get_athlete()`. Once he has seen it, the per-tick figure and the cap may
+  go up, never down. No medals come from old scores: no old move drill was
+  ever scored, so no level opens from history. Because it is live, unticking
+  on Today or editing a count on His sessions moves it; stamps never change.
 - **`will-deck-server-v1`** caches what only the server knows - earned deck
   badges (only ever added), the goal-week run to last week, and badges not
   yet celebrated. It is not the plays list, and nothing in it is a record.

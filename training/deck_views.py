@@ -21,7 +21,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .deck_rules import award_deck_badges, goal_weeks_for, rules_json
+from .deck_rules import award_deck_badges, goal_weeks_for, history_for, rules_json
 from .models import Badge, Card, EarnedBadge, Play
 
 # A phone left in a drawer for a month still holds plays worth keeping, so the
@@ -80,7 +80,7 @@ def deck(request):
         "training/deck.html",
         {
             "cards": cards,
-            "rules": rules_json(timezone.localdate()),
+            "rules": rules_json(timezone.localdate(), history_for(request.user)),
             "deck_badges": _deck_badges_json(request.user),
             "tab": "deck",
         },
