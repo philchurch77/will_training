@@ -439,24 +439,25 @@ class TestDeckPage:
     def test_the_deck_script_exists(self):
         assert finders.find("training/js/deck.js")
 
-    # Catches the deck reaching Will's own screens before leg 3: it is
-    # reached from the coach plan only.
-    def test_the_deck_is_linked_from_coach_and_not_from_today(self, client, will, seeded):
+    # Catches the switch-over (leg 3c) being undone: the deck is the Cards
+    # tab, and the old Today is reached from the coach screen only.
+    def test_the_deck_is_the_cards_tab_and_today_is_coach_only(self, client, will, seeded):
         client.force_login(will)
-        deck_url = reverse("training:deck")
-        assert deck_url in client.get(reverse("training:coach_plan")).content.decode()
-        assert deck_url not in client.get(reverse("training:today")).content.decode()
+        deck = client.get(reverse("training:deck")).content.decode()
+        assert 'href="/" class="tab is-on" data-tab="cards"' in deck
+        assert reverse("training:today") not in deck
+        assert reverse("training:today") in client.get(reverse("training:coach_plan")).content.decode()
 
 
 class TestDeckServiceWorker:
     def body(self, client):
         return client.get("/sw.js").content.decode()
 
-    # Catches the deck not working with no signal: the page and its script
-    # must be in the precache list.
+    # Catches the deck not working with no signal: the page at / and its
+    # script must be in the precache list.
     def test_the_deck_page_and_script_are_precached(self, client, deck):
         body = self.body(client)
-        assert '"/deck/"' in body
+        assert '"/"' in body
         assert "deck.js" in body
 
     # Catches the service worker answering /api/ from cache (an old list) or
@@ -716,7 +717,7 @@ class TestDeckScript:
     def test_the_game_strip_names_the_head_start_only_when_there_is_one(self):
         body = self.function_body("gameStrip")
         assert re.search(
-            r"RULES\.starting_points > 0 \? el\(.*?from your training so far\.' \}\) : null,",
+            r"RULES\.starting_points > 0 \? el\(.*?from before the cards\.' \}\) : null,",
             body,
         )
 

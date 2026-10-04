@@ -89,6 +89,21 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
   - For 3c:
     - the old Progress "Drills done ever" tile counts ticks only while the drill badges beside it count cards too - combine it or label it on the "Before the cards" page;
     - a badge awarded by a late offline tick carries the tick's date, one awarded at sync carries the server's.
+- **Leg 3c decisions** (4 Oct 2026, Phil):
+  - *3d today too*: the two weeks' grace is waived. It sails as its own passage straight after 3c.
+  - *One phrase for the old app*: "before the cards", everywhere.
+  - *Old Today* lives at `/today/`, reached from the coach screen only ("Old Today screen (until 3d)").
+  - *"Badges ›"* under the hand stays, as a shortcut to `#progress`.
+  - *If the deploy slips past Sunday 11 Oct*, move `BLOCKS_START` to that week's Monday in the same deploy (only before his first real play).
+- **Leg 3c forced in build** (4 Oct 2026):
+  - `/` renders the deck; `/deck/` and `/progress/` redirect to `/` and `/#progress`. Progress is drawn by `deck.js` (`renderProgress`), and `lightTab` lights the tab and sets the top-bar title.
+  - The Progress tab has two doors under the scoreboard (Sticker album, Before the cards), then every badge. The lit tab carries a bar and heavier type, not colour alone.
+  - Retired: streak-3, streak-7, streak-30, streak-100 (Century), perfect-week, minutes-500.
+  - `best_scores` reads retired drills, so his records survive 3d. `badge_progress` was deleted (no screen used it).
+  - **`clear_trial_plays` kept until 3d** (Purser): PR #3 put 3b on main at 10:44 on 4 Oct before the clear was confirmed, so the one tool that removes trial plays stays while it may still be needed.
+  - Gate for 3c: back up, then run the clear on Render (the 3b version is live), clear every trial phone's site data, then a second dry run reads 0. Only then merge 3c.
+  - Settled from 3b: the "Drills done ever" tile is gone (Before the cards shows totals, with no badges beside them).
+  - Left, Low: the album opened from Progress lights Cards; no tab is lit on the coach-only old screens (these go in 3d); "Progress" appears as both the top-bar title and the h1.
 - **Rewards are badges and medals, no real-world prizes**, and nothing rewards hours or days in a row on their own: pressure is the main reason children drop out.
 
 ## Legs
@@ -99,9 +114,9 @@ no signal he sees an old saved copy. The deck is drawn on the phone instead.
 | 2a | Scores that mean something | 1 | Points on every play, player levels, medals, move levels that unlock on gold, the sticker album, skill of the week - all offline | Quartermaster, Carpenter, Bosun, Master-at-Arms (API accepts more), Purser (0009), Gunner, Lookout | built 3 Oct 2026 on `deck-step-2`; deploy carries migration 0009 (back up first) |
 | 2b | Goals and badges | 2a | The weekly goal bar, weeks in a row, test week, the new badges awarded at sync, the Legend tag on retired badges | Quartermaster, Carpenter, Bosun, Master-at-Arms, Purser (0010 rebuilds the badge table), Gunner, Lookout | built 4 Oct 2026 on `deck-step-2b`; deploy with 2a carries 0009 + 0010 (back up first) |
 | 3a | Head start | 2b | His player level counts his old sessions and three keepy-up cards show his old best to beat - on /deck/, still off his tab bar | Quartermaster, Carpenter, Bosun, Master-at-Arms (light), Gunner, Lookout; no Purser (nothing written) | built 4 Oct 2026 on `deck-step-3`; no migration |
-| 3b | Badges in one place | 3a, and `clear_trial_plays` run on Render | The kept old badges count old ticks and card plays together, awarded at sync; the deck's Badges screen shows every badge he has; `DECK_KINDS` display split ends | Carpenter, Bosun, Master-at-Arms, Purser, Gunner, Lookout | built 4 Oct 2026 on `deck-step-3b`; no migration; merge only after the clear and the 0-plays dry run (see Leg 3b forced in build) |
-| 3c | Switch over | 3b | The home-screen icon opens the deck (`/` renders it, never redirects); tabs Cards and Progress; streak, Perfect week, 500 minutes, Century into `RETIRED_BADGES` (Legend if earned); old Progress becomes read-only "Before the cards"; `clear_trial_plays` deleted; skill blocks restart on switch-over Monday; CACHE bump and new precache list; tick endpoints stay live | Full crew; Purser and a disk backup before deploy; Lookout on a real phone offline | open |
-| 3d | Retire the fixed plan | 3c + about two weeks' grace | Plan screens, `_seed_plan`, Today/drill/library views, `session.js`, tick endpoints, `drill_uncomplete` and `seed_drills --reset` retired; drills stay seeded and inactive; CLAUDE.md rewritten; plan assertions in `test_seed.py` retired | Carpenter, Purser, Master-at-Arms, Gunner | open |
+| 3b | Badges in one place | 3a, and `clear_trial_plays` run on Render | The kept old badges count old ticks and card plays together, awarded at sync; the deck's Badges screen shows every badge he has; `DECK_KINDS` display split ends | Carpenter, Bosun, Master-at-Arms, Purser, Gunner, Lookout | built 4 Oct 2026 on `deck-step-3b`; **merged to main 4 Oct (PR #3, `baff415`) before the clear was confirmed** - see Leg 3c forced in build |
+| 3c | Switch over | 3b | The home-screen icon opens the deck (`/` renders it, never redirects); tabs Cards and Progress; streak, Perfect week, 500 minutes, Century into `RETIRED_BADGES` (Legend if earned); old Progress becomes read-only "Before the cards"; `clear_trial_plays` kept until 3d; skill blocks restart on switch-over Monday; CACHE bump and new precache list; tick endpoints stay live | Full crew; Purser and a disk backup before deploy; Lookout on a real phone offline | built 4 Oct 2026 on `deck-step-3c`; no migration; merge only after the clear has run on Render and a second dry run reads 0 |
+| 3d | Retire the fixed plan | 3c (grace waived by Phil, 4 Oct 2026) | Plan screens, `_seed_plan`, Today/drill/library views, `session.js`, tick endpoints, `drill_uncomplete`, `seed_drills --reset` and `clear_trial_plays` retired; drills stay seeded and inactive; CLAUDE.md rewritten; plan assertions in `test_seed.py` retired | Carpenter, Purser, Master-at-Arms, Gunner | open |
 
 ### Leg 2 detail, from the plan
 

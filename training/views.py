@@ -71,7 +71,7 @@ def login_view(request):
     One profile, so there is no name to pick - the pad is the whole screen.
     """
     if request.user.is_authenticated:
-        return redirect("training:today")
+        return redirect("training:deck")
 
     athlete = get_athlete()
     error = None
@@ -89,7 +89,7 @@ def login_view(request):
                 throttle.clear(request)
                 auth_login(request, user)
                 request.session.set_expiry(settings.SESSION_COOKIE_AGE)
-                return redirect(_safe_next(request) or "training:today")
+                return redirect(_safe_next(request) or "training:deck")
 
             locked_for = throttle.record_failure(request)
             error = throttle.describe(locked_for) or "Wrong code. Try again."
@@ -304,24 +304,25 @@ def session_time(request):
 
 
 @login_required
-def progress_view(request):
-    athlete = request.user
-    day = _today()
+def before_cards(request):
+    """Before the cards: what he did on the fixed plan, read-only (leg 3c).
 
+    Only what stays true for good - his best streak, totals, minutes per skill
+    and his records. No live streak (it breaks the day he switches, and would
+    read as a telling-off), no badges (they are on Progress now), and no link
+    to a drill page, which carries the tick and untick forms.
+    """
+    athlete = request.user
     return render(
         request,
-        "training/progress.html",
+        "training/before_cards.html",
         {
-            "streak": progress.current_streak(athlete, day),
             "longest": progress.longest_streak(athlete),
-            "month_sessions": progress.sessions_this_month(athlete, day),
             "total_drills": progress.drills_completed(athlete),
             "total_minutes": progress.total_minutes(athlete),
             "skill_rows": progress.minutes_by_skill(athlete),
-            "badge_rows": progress.badge_progress(athlete, day),
             "best_rows": progress.best_scores(athlete),
             "tab": "progress",
-            "today": day,
         },
     )
 
@@ -575,8 +576,8 @@ def manifest(request):
         "name": "Will's Training",
         "short_name": "Training",
         "description": (
-            "Will's daily football session: today's drills, his streak "
-            "and his badges."
+            "Will's football cards: play any three, chase medals and beat "
+            "his own best."
         ),
         "lang": "en-GB",
         "dir": "ltr",
@@ -618,14 +619,14 @@ def manifest(request):
         # Long-press the installed icon to jump straight to a screen.
         "shortcuts": [
             {
-                "name": "Today's session",
-                "short_name": "Today",
-                "url": reverse("training:today"),
+                "name": "My cards",
+                "short_name": "Cards",
+                "url": reverse("training:deck"),
             },
             {
                 "name": "My progress",
                 "short_name": "Progress",
-                "url": reverse("training:progress"),
+                "url": reverse("training:deck") + "#progress",
             },
         ],
     }
@@ -635,19 +636,19 @@ def manifest(request):
 
 
 def _precache_urls():
-    """Pages and assets the service worker should hold for offline use."""
+    """Pages and assets the service worker should hold for offline use.
+
+    The deck at `/` draws itself from the page and deck.js, so those two are
+    the whole app offline. The old fixed-plan screens are no longer kept:
+    they are off his tab bar (leg 3c), and offline they show the offline page.
+    app.js stays - it replays ticks still queued on his phone.
+    """
     urls = [
-        reverse("training:today"),
-        reverse("training:library"),
-        reverse("training:progress"),
+        reverse("training:deck"),
+        reverse("training:before_cards"),
         reverse("training:offline"),
         static("training/css/app.css"),
         static("training/js/app.js"),
-        static("training/js/drill.js"),
-        static("training/js/session.js"),
-        # The deck draws itself from the page and the script, so these two
-        # are the whole of it offline.
-        reverse("training:deck"),
         static("training/js/deck.js"),
         # The manifest and icons too: an installed app that is opened offline
         # still asks for these, and a miss shows the browser's default icon.
@@ -658,13 +659,6 @@ def _precache_urls():
         static("training/img/icon-maskable-512.png"),
         static("training/img/apple-touch-icon.png"),
     ]
-    try:
-        urls += [d.get_absolute_url() for d in Drill.objects.active()]
-        urls += [s.get_absolute_url() for s in Skill.objects.all()]
-    except Exception:
-        # Before migrations have run there is nothing to precache; the shell
-        # of the app is enough.
-        pass
     return urls
 
 

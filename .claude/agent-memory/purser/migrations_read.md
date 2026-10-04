@@ -60,3 +60,6 @@ does `PRAGMA foreign_keys = OFF` on enter and `check_constraints()` on exit
 (re-verified in .venv source). Additive, loses nothing. Applied on dev;
 `makemigrations --check` clean. 2a (0009) not yet on Render, so a 2b deploy
 carries 0009+0010 in one `migrate` pass.
+
+Legs 3a, 3b, 3c: no migrations. Dev `showmigrations` 0001-0010 applied,
+`makemigrations --check` clean on 2026-10-04 (deck-step-3c).

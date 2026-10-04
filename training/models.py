@@ -375,7 +375,7 @@ class Badge(models.Model):
     PERFECT_WEEKS = "perfect_weeks"
     # The deck's badges (leg 2b). Worked out on the server from Play rows by
     # deck_rules.deck_badge_values and awarded at sync - never by
-    # progress.award_badges, and never shown on the old Progress page.
+    # progress.award_badges. Shown with every other badge on the Progress tab.
     # DECK_KINDS also bounds clear_trial_plays: only these are ever cleared.
     GOAL_WEEKS_RUN = "goal_weeks_run"
     GOAL_WEEKS_TOTAL = "goal_weeks_total"

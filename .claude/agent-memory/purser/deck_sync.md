@@ -52,3 +52,17 @@ in try/except, drill_complete does not. Gunicorn is 1 worker x 4 threads, DB
 timeout 20, no WAL/transaction_mode set.
 Open after 3b review: no tests for any 3b guard (grep KEPT_KINDS in tests = 0).
 Badge text: longest description 70/120, name 16/40 (measured by ast over BADGES).
+
+**Leg 3c (reviewed 2026-10-04, no migration):** deck moved to `/` (`/deck/`
+302s to `/`, `/progress/` to `/#progress`); localStorage keys unchanged and
+same origin, so plays/draft/hand/server cache carry over. Tick URLs
+`/drill/<slug>/done/` unchanged; app.js still loads on `/` and flushes
+`will-training-queue` there. session.js no longer loads on `/` - only the
+deploy-day unbanked clock remainder (`will-training-clock`, date-keyed) can be
+stranded; queued ticks carry their own `session_seconds`. SW v25 activate
+deletes v24 (drill pages, Today) - caches only, never localStorage.
+`clear_trial_plays` deleted: after 3c NOTHING deletes a Play or an EarnedBadge
+(only `award()` creates; seed `_seed_badges` is update_or_create on Badge).
+RETIRED_BADGES = streak-3/7/30/100, perfect-week, minutes-500 (all six codes
+verified in BADGES). `best_scores` now reads retired drills; only reader is
+`before_cards`. No test asserts every RETIRED_BADGES code names a real badge.

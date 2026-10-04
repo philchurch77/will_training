@@ -31,6 +31,9 @@ The deck words come from `docs/chart/deck.md`.
 - **Goal week** - a Mon-Sun week with 3 deck sessions (2b).
 - **Legend** - the tag on a retired badge he earned and keeps (2b).
 - **Kept badge** - an old-app badge that carries on with the deck: First session, 10/50/100 drills, All rounder, Two footed, Keepy-up king. Counts ticks and card plays together (3b). `Badge.KEPT_KINDS`.
+- **Cards / Progress** - his two tabs since the switch-over (3c). Both are the one page at `/`, drawn by `deck.js`; Progress is `/#progress`.
+- **Before the cards** - the read-only page (`/before/`) of what he did on the fixed plan: best streak, totals, minutes per skill, records. The one name for the old app on his screens.
+- **Head start** - the points (and three bests) his old ticks give him on the deck, worked out live, written nowhere (3a).
 - **Card-day** - one card played on one day, however many times. What a play counts as toward a kept badge, the same as one tick.
 - **Sync** - the phone sending plays it has not sent yet to `/api/plays/`, and downloading them back if it has lost its copy.
 
@@ -40,5 +43,5 @@ The deck words come from `docs/chart/deck.md`.
 - **Plan / plan day** - the fixed fortnight of six-drill days, week A and week B.
 - **Tick** - marking a drill done on Today. A `SessionLog` row.
 - **Session clock** - the one count-up clock on Today. `SessionClock`.
-- **Streak** - required plan days in a row. Replaced by weeks-in-a-row at the switch-over.
+- **Streak** - required plan days in a row. Replaced by weeks-in-a-row at the switch-over; only his best streak survives, on Before the cards.
 - **Retired** - `is_active=False`; the row and every score pointing at it stay.

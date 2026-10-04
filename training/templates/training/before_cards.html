@@ -1,0 +1,74 @@
+{% extends "training/base.html" %}
+{% block title %}Before the cards{% endblock %}
+{% block heading %}Before the cards{% endblock %}
+
+{% block content %}
+{% comment %}
+  Read-only (leg 3c): what he did on the fixed plan, kept for good. Nothing
+  here links to a drill page - those carry the tick and untick forms - and
+  nothing here is live: no current streak, no badges (they are on Progress).
+{% endcomment %}
+
+<a class="linkbtn" href="{% url 'training:deck' %}#progress">&lsaquo; Progress</a>
+
+<div class="card card-hero mt">
+  <div class="hero-kicker">On the training plan</div>
+  <h1 class="hero-big">{{ total_drills }} drill{{ total_drills|pluralize }}</h1>
+  <p class="hero-sub">Everything you did on the training plan, before the cards came.</p>
+</div>
+
+<div class="stat-grid">
+  <div class="stat">
+    <div class="stat-num">{{ total_minutes }}</div>
+    <div class="stat-lab">Minutes trained</div>
+  </div>
+  <div class="stat">
+    <div class="stat-num">{{ longest }}</div>
+    <div class="stat-lab">Best streak, days</div>
+  </div>
+</div>
+
+<div class="card mt">
+  <h2>Minutes on each skill</h2>
+  <div class="chart">
+    {% for row in skill_rows %}
+      <div class="bar-row">
+        <div class="bar-head">
+          <span class="bar-label">{{ row.skill.emoji }} {{ row.skill.name }}</span>
+          <span class="bar-value">{{ row.minutes }} min</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill {% if not row.minutes %}is-zero{% endif %}"
+               style="width: {% if row.percent %}{{ row.percent }}%{% else %}0{% endif %}"></div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if best_rows %}
+  <div class="card">
+    <h2>My records</h2>
+    <p class="muted" style="font-size:15px">Your best ever on the drills you counted.</p>
+    <ul class="records">
+      {% for row in best_rows %}
+        <li>
+          <div class="record">
+            <span class="record-num">{{ row.best }}</span>
+            <span class="record-main">
+              <span class="drill-name">{{ row.drill.name }}</span>
+              <span class="drill-meta">
+                {% if row.best >= row.target %}
+                  <span>target {{ row.target }} beaten</span>
+                {% else %}
+                  <span>target {{ row.target }}</span>
+                {% endif %}
+              </span>
+            </span>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+{% endblock %}

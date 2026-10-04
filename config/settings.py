@@ -133,7 +133,7 @@ CACHES = {
 
 # --- Auth -----------------------------------------------------------------
 LOGIN_URL = "training:login"
-LOGIN_REDIRECT_URL = "training:today"
+LOGIN_REDIRECT_URL = "training:deck"
 LOGOUT_REDIRECT_URL = "training:login"
 
 # Will enters his code once and stays signed in for a year. Every request

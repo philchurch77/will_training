@@ -5,4 +5,5 @@
 - [Deck leg 2b decisions](decisions_deck_leg2b.md) — trust stamps for Gold/Record breaker, clear_trial_plays re-awards, goal_weeks wire shape, 0010.
 - [Deck leg 3 decisions](decisions_deck_leg3.md) — cut 3a-3d, head start computed live, only 3 drills map to cards, no past gold exists, "/" must render.
 - [Deck leg 3b decisions](decisions_deck_leg3b.md) — KEPT_KINDS, card-day unit, one values fn for both award paths, clear's delete stays DECK_KINDS, deploy after clear.
+- [Deck leg 3c decisions](decisions_deck_leg3c.md) — "/" is the deck, Today at /today/ keeps its name, Progress is #progress in deck.js, six retired badges, app.js '/?done=' trap.
 - [The developer's coaching voice](user_coaching_voice.md) — his drill lists are coaching briefs; expect duplicates and naming collisions, and say so.

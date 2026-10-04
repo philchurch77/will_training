@@ -141,9 +141,10 @@
         } catch (e) { /* ignore */ }
       }
 
+      // Back to the old Today, not to / - since the switch-over / is the deck.
       window.location.href = form.dataset.slug
-        ? '/?done=' + encodeURIComponent(form.dataset.slug)
-        : '/';
+        ? '/today/?done=' + encodeURIComponent(form.dataset.slug)
+        : '/today/';
     });
   });
 })();

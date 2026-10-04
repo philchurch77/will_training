@@ -1,15 +1,25 @@
 from django.urls import path
+from django.views.generic import RedirectView
 
 from . import deck_views, views
 
 app_name = "training"
 
 urlpatterns = [
-    # Child-facing
-    path("", views.today, name="today"),
+    # Child-facing. The deck is the app (leg 3c): `/` renders it, never
+    # redirects - the home-screen icon opens `/`, and the service worker
+    # refuses to keep a redirected page, so a redirect here would leave the
+    # icon blank offline. Progress is a tab drawn by deck.js (`/#progress`).
+    path("", deck_views.deck, name="deck"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
-    path("progress/", views.progress_view, name="progress"),
+    path("before/", views.before_cards, name="before_cards"),
+    # Old addresses, for bookmarks and cached pages.
+    path("deck/", RedirectView.as_view(url="/", permanent=False)),
+    path("progress/", RedirectView.as_view(url="/#progress", permanent=False)),
+    # The old fixed plan, off his tab bar until 3d retires it. The tick URLs
+    # never move: ticks queued on his phone replay to the address they stored.
+    path("today/", views.today, name="today"),
     path("library/", views.library, name="library"),
     path("library/<slug:slug>/", views.library, name="library_skill"),
     path("drill/<slug:slug>/", views.drill_detail, name="drill"),
@@ -17,8 +27,7 @@ urlpatterns = [
     path("drill/<slug:slug>/undo/", views.drill_uncomplete, name="drill_uncomplete"),
     path("session/time/", views.session_time, name="session_time"),
     path("offline/", views.offline, name="offline"),
-    # The deck. One page that draws itself on the phone, and what feeds it.
-    path("deck/", deck_views.deck, name="deck"),
+    # What feeds the deck.
     path("api/plays/", deck_views.api_plays, name="api_plays"),
     # Coach (staff only)
     path("coach/", views.coach_plan, name="coach_plan"),

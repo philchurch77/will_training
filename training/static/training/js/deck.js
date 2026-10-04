@@ -1,6 +1,6 @@
 /* The deck: deals his hand, runs a card, keeps every play, backs it up.
 
-   Everything on /deck/ is drawn here from what the phone already holds - the
+   Everything on / is drawn here from what the phone already holds - the
    cards baked into the page and the plays in localStorage - so it looks and
    works the same with no signal as with full bars. The server is the backup:
    plays go to /api/plays/ when there is signal, and come back from it if the
@@ -37,6 +37,8 @@
 
   var PLAYS_URL = root.getAttribute('data-plays-url');
   var LOGIN_URL = root.getAttribute('data-login-url');
+  // Missing on a page cached before the switch-over (leg 3c): no link then.
+  var BEFORE_URL = root.getAttribute('data-before-url');
 
   // --- cards ---------------------------------------------------------------
   // Arrive sorted by Card.order, which also puts the packs in their order.
@@ -564,7 +566,7 @@
       el('p', { class: 'deck-next', text: level.next ? 'Next: ' + level.next : 'Top level. Legend!' }),
       RULES.starting_points > 0
         ? el('p', { class: 'deck-next', text: 'Includes ' + RULES.starting_points +
-          (RULES.starting_points === 1 ? ' point' : ' points') + ' from your training so far.' })
+          (RULES.starting_points === 1 ? ' point' : ' points') + ' from before the cards.' })
         : null,
       skill ? el('p', { class: 'deck-skill' }, [
         'Skill of the week: ', el('strong', { text: moveName(skill) }), '. Double points.'
@@ -580,7 +582,8 @@
     return el('div', { class: 'deck-links' }, [
       el('a', { class: 'deck-back', href: '#album', text: 'Sticker album ›' }),
       // Not on a page cached before the badges existed: it has none to show.
-      BADGES.length ? el('a', { class: 'deck-back', href: '#badges', text: 'Badges ›' }) : null
+      // Since the switch-over this is a shortcut to the Progress tab.
+      BADGES.length ? el('a', { class: 'deck-back', href: '#progress', text: 'Badges ›' }) : null
     ]);
   }
 
@@ -685,7 +688,10 @@
     return lines.length ? el('div', { class: 'card deck-flash', role: 'status' }, lines) : null;
   }
 
-  function renderBadges(keepScroll) {
+  // The Progress tab (leg 3c): his level and week, the album, every badge he
+  // has, and the door to Before the cards. Drawn here, not on the server, so
+  // it adds up the same plays as the hand and is right with no signal.
+  function renderProgress(keepScroll) {
     var earned = loadServer().earned;
     var rows = BADGES.map(function (badge) {
       var has = badge.earned || earned.indexOf(badge.code) >= 0;
@@ -700,8 +706,14 @@
       ]);
     });
     show([
-      el('a', { class: 'deck-back', href: '#', text: '‹ Back to my hand' }),
-      el('h1', { class: 'deck-title', text: 'My badges' }),
+      el('h1', { class: 'deck-title', text: 'Progress' }),
+      gameStrip(loadPlays()),
+      // Two doors under the scoreboard, before the long list of badges.
+      el('div', { class: 'deck-doors' }, [
+        el('a', { class: 'btn btn-quiet', href: '#album', text: 'Sticker album ›' }),
+        BEFORE_URL ? el('a', { class: 'btn btn-quiet', href: BEFORE_URL, text: 'Before the cards ›' }) : null
+      ]),
+      el('h2', { text: 'My badges' }),
       el('p', { class: 'deck-note', text: 'New badges arrive when the phone has signal.' })
     ].concat(rows), false, keepScroll);
   }
@@ -1492,12 +1504,26 @@
       renderAll(keepScroll);
     } else if (hash === 'album' && RULES) {
       renderAlbum(keepScroll);
-    } else if (hash === 'badges' && RULES) {
-      renderBadges(keepScroll);
+    } else if ((hash === 'progress' || hash === 'badges') && RULES) {
+      renderProgress(keepScroll);
     } else if (hash === 'test' && RULES && RULES.test_cards) {
       renderTest(keepScroll);
     } else {
       renderHand(keepScroll);
+    }
+    lightTab(hash === 'progress' || hash === 'badges' ? 'progress' : 'cards');
+  }
+
+  // Both tabs are this one page, so the server cannot say which is lit, or
+  // what the top bar should call it.
+  function lightTab(name) {
+    var title = document.querySelector('.topbar-title');
+    if (title) { title.textContent = name === 'progress' ? 'Progress' : 'Cards'; }
+    var tabs = document.querySelectorAll('.tabbar [data-tab]');
+    for (var i = 0; i < tabs.length; i++) {
+      var on = tabs[i].getAttribute('data-tab') === name;
+      tabs[i].classList.toggle('is-on', on);
+      if (on) { tabs[i].setAttribute('aria-current', 'page'); } else { tabs[i].removeAttribute('aria-current'); }
     }
   }
 

@@ -165,10 +165,11 @@ def best_scores(athlete):
     """Every rep drill he has a score on, best first. His record board.
 
     Only drills he has actually counted appear - a board of empty rows is not
-    a thing to be proud of.
+    a thing to be proud of. Retired drills included: a record is his for good,
+    and 3d retires every drill.
     """
     rows = []
-    for drill in Drill.objects.active().filter(target_reps__isnull=False):
+    for drill in Drill.objects.filter(target_reps__isnull=False):
         best = personal_best(athlete, drill)
         if best:
             rows.append({"drill": drill, "best": best, "target": drill.target_reps})
@@ -334,37 +335,6 @@ def minutes_by_skill(athlete, since=None):
     peak = max([row["minutes"] for row in rows], default=0)
     for row in rows:
         row["percent"] = round(row["minutes"] / peak * 100) if peak else 0
-    return rows
-
-
-def badge_progress(athlete, today):
-    """Every badge, annotated with whether it is earned and how close he is.
-
-    The deck's badges are left out: they live on the deck until the
-    switch-over. A retired badge shows only if he earned it, tagged Legend.
-    """
-    earned = {
-        eb.badge_id: eb for eb in EarnedBadge.objects.filter(athlete=athlete)
-    }
-    values = _badge_values(athlete, today)
-
-    rows = []
-    for badge in Badge.objects.exclude(kind__in=Badge.DECK_KINDS):
-        if not badge.is_active and badge.id not in earned:
-            continue
-        value = values.get(badge.kind, 0)
-        rows.append(
-            {
-                "badge": badge,
-                "legend": not badge.is_active,
-                "earned": badge.id in earned,
-                "earned_on": earned[badge.id].earned_on if badge.id in earned else None,
-                "value": value,
-                "percent": min(100, round(value / badge.threshold * 100))
-                if badge.threshold
-                else 0,
-            }
-        )
     return rows
 
 
