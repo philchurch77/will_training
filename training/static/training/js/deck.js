@@ -44,11 +44,25 @@
   var BY_SLUG = {};
   var BY_PACK = {};
   var PACK_ORDER = [];
+  var BY_MOVE = {};        // move slug -> {1: card, 2: card, 3: card}
+  var MOVE_ORDER = [];
   CARDS.forEach(function (card) {
     BY_SLUG[card.slug] = card;
     if (!BY_PACK[card.pack]) { BY_PACK[card.pack] = []; PACK_ORDER.push(card.pack); }
     BY_PACK[card.pack].push(card);
+    if (card.move) {
+      if (!BY_MOVE[card.move]) { BY_MOVE[card.move] = {}; MOVE_ORDER.push(card.move); }
+      BY_MOVE[card.move][card.level] = card;
+    }
   });
+
+  // The game's numbers, from deck_rules.py. Absent on a page cached before
+  // the game existed: then the game stays hidden and plays go unstamped,
+  // which the server stores as worth nothing. Never a number of our own here.
+  var RULES = null;
+  try { RULES = JSON.parse((document.getElementById('deck-rules') || {}).textContent || 'null'); } catch (e) { RULES = null; }
+  // The one fallback: a page cached before the game still says "play any 3".
+  var SESSION_CARDS = RULES ? RULES.session_cards : 3;
 
   // --- storage -------------------------------------------------------------
   // If localStorage is blocked or full, carry on in memory and say so on
@@ -113,9 +127,14 @@
     return {
       id: fields.id, card: fields.card, date: fields.date, played_at: fields.played_at,
       score: fields.score, weak_score: fields.weak_score,
+      // The stamp travels with the play everywhere, or wire() and restore()
+      // would quietly drop what it was worth.
+      points: nullable(fields.points), medal: nullable(fields.medal), bests: nullable(fields.bests),
       synced: !!synced, refused: null
     };
   }
+
+  function nullable(v) { return v === undefined ? null : v; }
 
   // Read, change, write, in one go, so a sync answer landing while he plays
   // a card is applied to the list as it is now, not as it was.
@@ -208,6 +227,140 @@
     return done;
   }
 
+  // --- the game ------------------------------------------------------------
+  // A play is stamped once, when he saves it: points, medal, bests. Everything
+  // after that - his total, his level, what is unlocked - adds up stamps, so
+  // a change to the numbers in deck_rules.py never takes back what he earned.
+
+  var MEDAL_WORDS = ['', 'Bronze', 'Silver', 'Gold'];
+
+  // A word and stars, never a colour on its own.
+  function medalText(medal) {
+    return medal ? MEDAL_WORDS[medal] + ' ' + new Array(medal + 1).join('★') : '';
+  }
+
+  function thisMonday() {
+    var d = new Date();
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return localDate(d);
+  }
+
+  // This week's entry in the baked calendar: {monday, move, test}.
+  function thisWeek() {
+    if (!RULES) { return null; }
+    var monday = thisMonday();
+    for (var i = 0; i < RULES.calendar.length; i++) {
+      if (RULES.calendar[i].monday === monday) { return RULES.calendar[i]; }
+    }
+    return null;
+  }
+
+  function skillMove() { var week = thisWeek(); return week ? week.move : null; }
+
+  function moveName(move) {
+    var first = BY_MOVE[move] && (BY_MOVE[move][1] || BY_MOVE[move][2] || BY_MOVE[move][3]);
+    return first ? first.name.split(':')[0] : move;
+  }
+
+  // The part of a move card's name after the move: "on the spot".
+  function levelName(card) {
+    var parts = card.name.split(': ');
+    return parts.length > 1 ? parts[1].charAt(0).toUpperCase() + parts[1].slice(1) : card.name;
+  }
+
+  // The worse foot of a play: a medal means both feet reached it.
+  function worseFoot(card, score, weak) {
+    if (!counts(card, score) || !counts(card, weak)) { return null; }
+    return beats(card, score, weak) ? weak : score;
+  }
+
+  function medalFor(card, score, weak) {
+    var targets = card.medals || [];
+    var value = card.per_foot ? worseFoot(card, score, weak) : score;
+    if (!counts(card, value)) { return 0; }
+    for (var i = 2; i >= 0; i--) {
+      var target = targets[i];
+      if (target === null || target === undefined) { continue; }
+      if (card.scoring === 'time' ? value <= target : value >= target) { return i + 1; }
+    }
+    return 0;
+  }
+
+  // A best of 0 is no best to beat: otherwise saving 0 first, by accident or
+  // on purpose, turns any next score into a "new best" worth the bonus.
+  function realBest(value) { return value === 0 ? null : value; }
+
+  // What this play is worth, worked out once. `before` is his best on the
+  // card before this play; a first score is not a personal best.
+  function stamp(card, score, weak, before) {
+    if (!RULES) { return { points: null, medal: null, bests: null }; }
+    var P = RULES.points;
+    var bests = 0;
+    if (card.scoring !== 'none') {
+      if (counts(card, score) && realBest(before.score) !== null && beats(card, score, before.score)) { bests++; }
+      if (card.per_foot && counts(card, weak) && realBest(before.weak) !== null && beats(card, weak, before.weak)) { bests++; }
+    }
+    var points = P.base;
+    if (card.per_foot || RULES.weak_foot_cards.indexOf(card.slug) >= 0) { points += P.weak_foot; }
+    points += bests * P.best;
+    if (card.move && card.move === skillMove()) { points *= P.skill_multiplier; }
+    return {
+      points: points,
+      medal: card.scoring === 'none' ? 0 : medalFor(card, score, weak),
+      bests: bests
+    };
+  }
+
+  function totalPoints(plays) {
+    var total = RULES ? RULES.starting_points : 0;
+    plays.forEach(function (play) { total += play.points || 0; });
+    return total;
+  }
+
+  // {index, name, next (name or null), part (0-1 of the way to next)}
+  function levelFor(points) {
+    var levels = RULES.levels;
+    var i = 0;
+    while (i + 1 < levels.length && points >= levels[i + 1].points) { i++; }
+    var next = levels[i + 1];
+    return {
+      index: i,
+      name: levels[i].name,
+      next: next ? next.name : null,
+      part: next ? (points - levels[i].points) / (next.points - levels[i].points) : 1
+    };
+  }
+
+  function bestMedal(slug, plays) {
+    var best = 0;
+    plays.forEach(function (play) {
+      if (play.card === slug && (play.medal || 0) > best) { best = play.medal; }
+    });
+    return best;
+  }
+
+  // The card one level down that has to be gold first, or null.
+  function gateFor(card) {
+    if (!card.move || !card.level || card.level <= 1) { return null; }
+    return (BY_MOVE[card.move] || {})[card.level - 1] || null;
+  }
+
+  // Level 1 is always open; a higher level opens on gold one level down.
+  function isOpen(card, plays) {
+    if (!RULES) { return true; }
+    var gate = gateFor(card);
+    return !gate || bestMedal(gate.slug, plays) === 3;
+  }
+
+  // The highest open level of a move.
+  function topOpen(move, plays) {
+    var levels = BY_MOVE[move] || {};
+    for (var level = 3; level >= 1; level--) {
+      if (levels[level] && isOpen(levels[level], plays)) { return levels[level]; }
+    }
+    return null;
+  }
+
   // --- dealing -------------------------------------------------------------
   // Five cards from five packs: always a Moves card, always one of Quick feet
   // or Combos, then three more from the packs left. Free play is never dealt;
@@ -221,19 +374,28 @@
     var taken = {};
     var usedPacks = {};
 
+    // A locked move level is never dealt.
     function take(pack) {
-      var all = (BY_PACK[pack] || []).filter(function (c) { return !taken[c.slug]; });
+      var all = (BY_PACK[pack] || []).filter(function (c) {
+        return !taken[c.slug] && isOpen(c, plays);
+      });
       var fresh = all.filter(function (c) { return !avoid[c.slug]; });
       var pool = fresh.length ? fresh : all;
       if (!pool.length) { return false; }
-      var card = pool[Math.floor(Math.random() * pool.length)];
-      hand.push(card.slug);
-      taken[card.slug] = true;
-      usedPacks[pack] = true;
+      add1(pool[Math.floor(Math.random() * pool.length)]);
       return true;
     }
+    function add1(card) {
+      hand.push(card.slug);
+      taken[card.slug] = true;
+      usedPacks[card.pack] = true;
+    }
 
-    take(MOVES);
+    // The Moves card is the skill of the week at its highest open level, so
+    // the double points are always in his hand.
+    var skill = skillMove();
+    var skillCard = skill ? topOpen(skill, plays) : null;
+    if (skillCard) { add1(skillCard); } else { take(MOVES); }
     var second = shuffle(PINNED_SECOND.filter(function (p) { return BY_PACK[p]; }));
     for (var s = 0; s < second.length && !take(second[s]); s++) { /* next */ }
     var others = shuffle(PACK_ORDER.filter(function (p) {
@@ -253,9 +415,26 @@
     var today = localDate();
     var stored = null;
     try { stored = JSON.parse(getItem(HAND_KEY) || 'null'); } catch (e) { stored = null; }
+    var plays = loadPlays();
+    // Dealt again if a card in it was retired, or is locked - a hand stored
+    // before the game existed may hold a level he has not opened.
     var ok = stored && stored.date === today && Array.isArray(stored.slugs) &&
-      stored.slugs.length && stored.slugs.every(function (s) { return BY_SLUG[s]; });
-    if (ok) { return stored.slugs; }
+      stored.slugs.length && stored.slugs.every(function (s) {
+        return BY_SLUG[s] && isOpen(BY_SLUG[s], plays);
+      });
+    if (ok) {
+      // He just won gold on the skill card in his hand: swap in the level it
+      // opened, so the double points follow him up without a re-deal.
+      var skill = skillMove();
+      var top = skill ? topOpen(skill, plays) : null;
+      var slugs = stored.slugs.map(function (s) {
+        return top && BY_SLUG[s].move === skill && s !== top.slug ? top.slug : s;
+      });
+      if (slugs.join() !== stored.slugs.join()) {
+        setItem(HAND_KEY, JSON.stringify({ date: today, slugs: slugs }));
+      }
+      return slugs;
+    }
     var hand = deal();
     setItem(HAND_KEY, JSON.stringify({ date: today, slugs: hand }));
     return hand;
@@ -328,19 +507,62 @@
   }
 
   // Done is a tick and the word, never colour alone.
-  function cardRow(card, done) {
-    return el('a', { class: 'drill-row deck-row' + (done ? ' is-done' : ''), href: '#card/' + card.slug }, [
+  // Locked, best medal and double points are all said in words.
+  function cardRow(card, done, plays) {
+    var locked = !isOpen(card, plays);
+    var medal = bestMedal(card.slug, plays);
+    var double = RULES && card.move && card.move === skillMove();
+    return el('a', {
+      class: 'drill-row deck-row' + (done ? ' is-done' : '') + (locked ? ' is-locked' : ''),
+      href: '#card/' + card.slug
+    }, [
       el('span', { class: 'tick', 'aria-hidden': 'true', text: done ? '✓' : '' }),
       el('span', { class: 'drill-main' }, [
         el('span', { class: 'drill-name', text: card.name }),
         el('span', { class: 'drill-meta' }, [
+          locked ? el('span', { class: 'deck-lock', text: 'Locked' }) : null,
           el('span', { text: card.pack_name }),
           kitText(card) ? el('span', { text: kitText(card) }) : null,
+          double && !locked ? el('span', { class: 'deck-double', text: 'Double points' }) : null,
+          medal ? el('span', { class: 'deck-medal', text: medalText(medal) }) : null,
           done ? el('span', { class: 'deck-done', text: 'Done' }) : null
         ])
       ]),
-      el('span', { class: 'chev', 'aria-hidden': 'true', text: '›' })
+      locked ? null : el('span', { class: 'chev', 'aria-hidden': 'true', text: '›' })
     ]);
+  }
+
+  // Level, points and the skill of the week, at the top of the hand.
+  function gameStrip(plays) {
+    if (!RULES) { return null; }
+    var points = totalPoints(plays);
+    var level = levelFor(points);
+    var fill = el('div', { class: 'bar-fill' });
+    fill.style.width = Math.round(level.part * 100) + '%';
+    var skill = skillMove();
+    // Kept light: the cards below are the job, this is the scoreboard.
+    return el('div', { class: 'card deck-game' }, [
+      el('div', { class: 'deck-level' }, [
+        el('span', { class: 'deck-level-name', text: level.name }),
+        el('span', { class: 'deck-points', text: points + ' points' })
+      ]),
+      level.next ? el('div', { class: 'bar-track deck-bar', role: 'img', 'aria-label': 'On the way to ' + level.next }, [fill]) : null,
+      el('p', { class: 'deck-next', text: level.next ? 'Next: ' + level.next : 'Top level. Legend!' }),
+      skill ? el('p', { class: 'deck-skill' }, [
+        'Skill of the week: ', el('strong', { text: moveName(skill) }), '. Double points.'
+      ]) : null,
+      el('a', { class: 'deck-back deck-album-link', href: '#album', text: 'My sticker album ›' })
+    ]);
+  }
+
+  // What a free play just earned, shown once on the next screen drawn.
+  var flash = null;
+  function flashCard() {
+    var lines = flash;
+    flash = null;
+    if (!lines || !lines.length) { return null; }
+    return el('div', { class: 'card deck-flash', role: 'status' },
+      [el('div', { class: 'hero-kicker', text: 'Football logged' })].concat(lines));
   }
 
   function freePlayButton(doneToday) {
@@ -353,7 +575,11 @@
     return el('button', {
       type: 'button', class: 'btn mt',
       onclick: function () {
-        savePlay(card, null, null);
+        // Like every other play: say what it was worth, and a level-up it
+        // causes is shown, not just quietly applied.
+        var was = gameState(card);
+        var play = savePlay(card, null, null, { score: null, weak: null });
+        flash = rewardLines(card, play, was);
         route();
       }
     }, [card.name]);
@@ -365,18 +591,21 @@
     var done = playedOn(plays, localDate());
     var hand = currentHand();
     var count = Object.keys(done).filter(function (s) { return s !== FREE_PLAY; }).length;
+    var size = SESSION_CARDS;
     var sub = count === 0 ? 'Pick one to start.'
-      : count >= 3 ? count + ' done. That is a session!'
-      : 'Done today: ' + count + ' of 3';
+      : count >= size ? count + ' done. That is a session!'
+      : 'Done today: ' + count + ' of ' + size;
 
     show([
       el('div', { class: 'card card-hero' }, [
         el('div', { class: 'hero-kicker', text: 'Your hand' }),
-        el('h1', { class: 'hero-big', text: 'Play any 3' }),
+        el('h1', { class: 'hero-big', text: 'Play any ' + size }),
         el('p', { class: 'hero-sub', text: sub })
       ]),
+      flashCard(),
+      gameStrip(plays),
       el('div', { class: 'drill-list' }, hand.map(function (slug) {
-        return cardRow(BY_SLUG[slug], done[slug]);
+        return cardRow(BY_SLUG[slug], done[slug], plays);
       })),
       freePlayButton(done[FREE_PLAY]),
       el('a', { class: 'btn btn-quiet mt', href: '#all', text: 'Pick from the whole deck' }),
@@ -392,7 +621,8 @@
   // A plain list under pack headings: everything is reachable by scrolling
   // down, nothing by scrolling sideways.
   function renderAll(keepScroll) {
-    var done = playedOn(loadPlays(), localDate());
+    var plays = loadPlays();
+    var done = playedOn(plays, localDate());
     var rows = [];
     PACK_ORDER.forEach(function (pack) {
       var cards = BY_PACK[pack];
@@ -400,7 +630,7 @@
         el('span', { class: 'drill-group-name', text: cards[0].pack_name }),
         el('span', { class: 'drill-group-count', text: String(cards.length) })
       ]));
-      cards.forEach(function (card) { rows.push(cardRow(card, done[card.slug])); });
+      cards.forEach(function (card) { rows.push(cardRow(card, done[card.slug], plays)); });
     });
     show([
       el('a', { class: 'deck-back', href: '#', text: '‹ Back to my hand' }),
@@ -408,24 +638,84 @@
     ], false, keepScroll);
   }
 
+  // --- the sticker album ---------------------------------------------------
+  // Every move, every level, empty slots and locked ones included, so he can
+  // see what there is to win. A medal is a word and stars; a lock says what
+  // opens it.
+  function renderAlbum(keepScroll) {
+    var plays = loadPlays();
+    var skill = skillMove();
+    var blocks = MOVE_ORDER.map(function (move) {
+      var slots = [1, 2, 3].map(function (level) {
+        var card = BY_MOVE[move][level];
+        if (!card) { return null; }
+        var medal = bestMedal(card.slug, plays);
+        var open = isOpen(card, plays);
+        var gate = gateFor(card);
+        return el(open ? 'a' : 'div', {
+          class: 'deck-slot' + (medal ? ' has-medal' : '') + (open ? '' : ' is-locked'),
+          href: open ? '#card/' + card.slug : null
+        }, [
+          el('span', { class: 'deck-slot-level', text: 'Level ' + level + ': ' + levelName(card) }),
+          el('span', {
+            class: 'deck-slot-medal',
+            text: !open ? 'Locked. Gold on level ' + gate.level + ' opens it.'
+              : medal ? medalText(medal) : 'No medal yet'
+          })
+        ]);
+      });
+      return el('div', { class: 'deck-album-move' }, [
+        el('h2', { class: 'deck-album-name' }, [
+          moveName(move),
+          move === skill ? el('span', { class: 'deck-double', text: 'Skill of the week' }) : null
+        ]),
+        el('div', { class: 'deck-slots' }, slots)
+      ]);
+    });
+    show([
+      el('a', { class: 'deck-back', href: '#', text: '‹ Back to my hand' }),
+      el('h1', { class: 'deck-title', text: 'Sticker album' }),
+      el('p', { class: 'deck-best', text: 'Gold on a level opens the next one.' })
+    ].concat(blocks), false, keepScroll);
+  }
+
   // --- a card --------------------------------------------------------------
   function renderCard(card) {
-    var before = bestsFor(card, loadPlays());
+    var plays = loadPlays();
+    var before = bestsFor(card, plays);
     var stage = el('div', { class: 'card deck-stage' });
     var bestEl = bestLine(card, before);
+    var medal = bestMedal(card.slug, plays);
+    var gate = gateFor(card);
+    var locked = !isOpen(card, plays);
+    var double = RULES && card.move && card.move === skillMove();
 
     show([
       el('a', { class: 'deck-back', href: '#', text: '‹ Back to my hand' }),
       el('h1', { class: 'deck-title', text: card.name }),
       el('p', { class: 'drill-meta deck-meta' }, [
         el('span', { text: card.pack_name }),
-        kitText(card) ? el('span', { text: kitText(card) }) : null
+        kitText(card) ? el('span', { text: kitText(card) }) : null,
+        double && !locked ? el('span', { class: 'deck-double', text: 'Double points this week' }) : null
       ]),
+      // Said before the instructions, so he does not read the whole card
+      // first and then find out he cannot play it.
+      // The same words as the album, for the same rule.
+      locked ? el('p', { class: 'deck-locked', text: 'Locked. Gold on level ' + gate.level + ' (' + levelName(gate) + ') opens it.' }) : null,
       el('p', { class: 'instructions', text: card.instructions }),
       el('div', { class: 'cue', text: card.cue }),
-      bestEl,
+      locked || card.scoring === 'none' ? null : bestEl,
+      medal ? el('p', { class: 'deck-medal-line', text: 'Your medal: ' + medalText(medal) }) : null,
       stage
     ], true);
+
+    // A locked level can be read, not played: it says what opens it.
+    if (locked) {
+      add(stage, [
+        el('a', { class: 'btn', href: '#card/' + gate.slug, text: 'Go to ' + levelName(gate) })
+      ]);
+      return;
+    }
 
     if (card.scoring === 'none') {
       var doneToday = playedOn(loadPlays(), localDate())[card.slug];
@@ -471,12 +761,14 @@
     function finish() {
       var score = card.per_foot ? results.strong : results.one;
       var weak = card.per_foot ? results.weak : null;
-      savePlay(card, score, weak);
+      // How things stood before this play, to say what it changed.
+      var was = gameState(card);
+      var play = savePlay(card, score, weak, before);
       setItem(DRAFT_KEY, 'null');
       var now = bestLine(card, bestsFor(card, loadPlays()));
       bestEl.parentNode.replaceChild(now, bestEl);
       bestEl = now;
-      summary(stage, card, before, score, weak);
+      summary(stage, card, before, score, weak, play, was);
     }
 
     var draft = readDraft(card);
@@ -499,7 +791,9 @@
   }
 
   function bestLine(card, best) {
-    if (best.weak === null && best.score === null) {
+    // A 0 is no best to beat (realBest), so it is not shown as his best and
+    // then the next score called a first.
+    if (realBest(best.weak) === null && realBest(best.score) === null) {
       return el('p', { class: 'deck-best', text: 'No score yet. This one sets it.' });
     }
     if (!card.per_foot) {
@@ -513,14 +807,19 @@
     ]);
   }
 
-  function savePlay(card, score, weak) {
+  // `before` is his best on the card before this play, for the stamp.
+  function savePlay(card, score, weak, before) {
+    var worth = stamp(card, score, weak, before);
     var play = makePlay({
       id: newId(),
       card: card.slug,
       date: localDate(),
       played_at: new Date().toISOString(),
       score: score,
-      weak_score: weak
+      weak_score: weak,
+      points: worth.points,
+      medal: worth.medal,
+      bests: worth.bests
     }, false);
     // On the phone first. Sending it is a bonus that can happen later.
     updatePlays(function (list) { list.push(play); });
@@ -531,11 +830,49 @@
   // A 0 is saved - nought corners is a real result - but it is not cheered.
   function verdict(card, value, best) {
     if (!counts(card, value) || value === 0) { return ''; }
-    if (best === null) { return 'First score'; }
+    if (realBest(best) === null) { return 'First score'; }
     return beats(card, value, best) ? 'New best!' : '';
   }
 
-  function summary(stage, card, before, score, weak) {
+  // His level, and whether the next level of this move was open, so the
+  // summary can say what the play just changed.
+  function gameState(card) {
+    if (!RULES) { return null; }
+    var plays = loadPlays();
+    var next = card.move ? (BY_MOVE[card.move] || {})[card.level + 1] : null;
+    return {
+      level: levelFor(totalPoints(plays)).index,
+      next: next || null,
+      nextOpen: next ? isOpen(next, plays) : true
+    };
+  }
+
+  // What the play was worth: points, medal, anything it opened, a level-up.
+  function rewardLines(card, play, was) {
+    if (!was || play.points === null) { return []; }
+    var plays = loadPlays();
+    var out = [];
+    var double = card.move && card.move === skillMove();
+    out.push(el('p', { class: 'deck-earned' }, [
+      el('strong', { text: '+' + play.points + ' points' }),
+      double ? ' (double: skill of the week)' : ''
+    ]));
+    if (play.medal) {
+      out.push(el('p', { class: 'deck-medal-won', text: medalText(play.medal) + ' medal' }));
+    }
+    if (was.next && !was.nextOpen && isOpen(was.next, plays)) {
+      out.push(el('p', { class: 'deck-unlock' }, [
+        'Gold! You opened ', el('strong', { text: was.next.name }), '.'
+      ]));
+    }
+    var level = levelFor(totalPoints(plays));
+    if (level.index > was.level) {
+      out.push(el('p', { class: 'deck-levelup', text: 'Level up! You are now ' + level.name + '.' }));
+    }
+    return out;
+  }
+
+  function summary(stage, card, before, score, weak, play, was) {
     clear(stage);
     var lines = [];
     if (card.per_foot) {
@@ -552,6 +889,7 @@
     } else {
       lines.push(resultLine('Score', card, score, verdict(card, score, before.score)));
     }
+    lines = lines.concat(rewardLines(card, play, was));
     add(stage, [el('div', { class: 'hero-kicker', text: 'Saved' })].concat(lines).concat([
       el('button', {
         type: 'button', class: 'btn mt',
@@ -905,6 +1243,15 @@
             var local = mine[s.id];
             if (local) {
               if (!local.synced) { local.synced = true; local.refused = null; changed = true; }
+              // A copy that lost its stamp - restored once by an old cached
+              // page - gets it back from the server. Nulls only: a stamp is
+              // written once, so filling a gap can never take anything back.
+              ['points', 'medal', 'bests'].forEach(function (field) {
+                if (local[field] === null && s[field] !== null && s[field] !== undefined) {
+                  local[field] = s[field];
+                  changed = true;
+                }
+              });
               return;
             }
             list.push(makePlay(s, true));
@@ -925,6 +1272,8 @@
       renderCard(BY_SLUG[hash.slice(5)]);
     } else if (hash === 'all') {
       renderAll(keepScroll);
+    } else if (hash === 'album' && RULES) {
+      renderAlbum(keepScroll);
     } else {
       renderHand(keepScroll);
     }

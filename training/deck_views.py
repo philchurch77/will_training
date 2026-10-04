@@ -20,6 +20,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from .deck_rules import rules_json
 from .models import Card, Play
 
 # A phone left in a drawer for a month still holds plays worth keeping, so the
@@ -33,6 +34,10 @@ MAX_SCORE = 100_000
 # Plays per sync. The phone sends everything it has not sent yet; this is a
 # ceiling on one request, and the phone simply sends the rest next time.
 MAX_BATCH = 500
+
+# Upper bounds for a play's stamp. Points top out near 110 under today's rules
+# and a medal is 0-3, bests 0-2 (one per foot).
+STAMP_CEILINGS = {"points": 1000, "medal": Play.GOLD, "bests": 2}
 
 
 def api_login_required(view):
@@ -67,7 +72,11 @@ def deck(request):
     page loads with signal.
     """
     cards = [_card_json(card) for card in Card.objects.active()]
-    return render(request, "training/deck.html", {"cards": cards, "tab": "deck"})
+    return render(
+        request,
+        "training/deck.html",
+        {"cards": cards, "rules": rules_json(timezone.localdate()), "tab": "deck"},
+    )
 
 
 @api_login_required
@@ -177,7 +186,38 @@ def _play_json(play):
         "played_at": play.played_at.isoformat(),
         "score": play.score,
         "weak_score": play.weak_score,
+        "points": play.points,
+        "medal": play.medal,
+        "bests": play.bests,
     }
+
+
+def _parse_stamp(raw, scores):
+    """The play's stamp, or no stamp at all - never a reason to refuse it.
+
+    Optional: a play from before the game layer, or from an old cached page,
+    has none and is stored as worth nothing. Anything odd - out of range, not
+    a whole number, a medal with no score - drops all three fields and keeps
+    the play. A refused play sits on the phone unsent, and a real score must
+    never be lost over what it was worth in the game.
+
+    Never checked against today's targets or points: change one and every
+    older stamp would fail. The ceilings are loose for the same reason.
+    """
+    none = {field: None for field in STAMP_CEILINGS}
+    stamp = {}
+    for field, ceiling in STAMP_CEILINGS.items():
+        value = raw.get(field)
+        if value is None:
+            stamp[field] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= ceiling:
+            return none
+        stamp[field] = value
+    # The one cross-check that stays true whatever the targets become.
+    if stamp.get("medal") and scores.get("score") is None and scores.get("weak_score") is None:
+        return none
+    return stamp
 
 
 def _safe_id(raw):
@@ -242,6 +282,8 @@ def _parse_play(raw, athlete, cards):
         if not 0 <= value <= MAX_SCORE:
             return None, f"{field} out of range"
         scores[field] = value
+
+    scores.update(_parse_stamp(raw, scores))
 
     return (
         Play(

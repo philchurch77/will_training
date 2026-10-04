@@ -56,67 +56,70 @@ def sentences(text):
 
 # --- a card's meaning is frozen ----------------------------------------------
 
-# (scoring, per_foot, timer_seconds, out_of) for every card, as first shipped.
-# These four decide what a score against the card means. Changing one in place
-# silently rewrites every play already made against it.
+# (scoring, per_foot, timer_seconds, out_of, move, level) for every card, as
+# first shipped. The first four decide what a score against the card means;
+# move and level decide which skill of the week doubles it and which level it
+# unlocks. Changing one in place silently rewrites every play already made
+# against it.
 FROZEN_MEANINGS = {
-    "toe-taps-30": ("count", False, 30, None),
-    "foundations-30": ("count", False, 30, None),
-    "inside-outside-30": ("count", True, 30, None),
-    "pull-push-30": ("count", True, 30, None),
-    "combo-step-over-cruyff": ("count", True, 30, None),
-    "combo-rollover-chop": ("count", True, 30, None),
-    "combo-double-scissor": ("count", True, 30, None),
-    "combo-l-turn": ("count", True, 30, None),
-    "combo-croqueta-chop": ("count", True, 30, None),
-    "combo-tap-drag-turn": ("count", True, 30, None),
-    "rebounder-two-touch": ("count", True, 60, None),
-    "rebounder-one-touch": ("count", True, 60, None),
-    "rebounder-turn": ("count", True, None, 10),
-    "rebounder-into-space": ("count", True, None, 10),
-    "rebounder-cushion": ("count", True, None, 10),
-    "slalom-race": ("time", False, None, None),
-    "speed-dribble-race": ("time", False, None, None),
-    "slow-slow-fast": ("count", False, None, 8),
-    "corners": ("count", True, None, 5),
-    "laces-rolling": ("count", True, None, 5),
-    "rebounder-finish": ("count", True, None, 5),
-    "volley-finish": ("count", True, None, 5),
-    "keepy-ups-best": ("count", False, None, None),
-    "keepy-ups-weak": ("count", False, None, None),
-    "keepy-ups-alternate": ("count", False, None, None),
-    "keepy-ups-thighs": ("count", False, None, None),
-    "free-play": ("none", False, None, None),
-    "chop-1": ("count", True, 30, None),
-    "chop-2": ("time", False, None, None),
-    "chop-3": ("count", False, None, 8),
-    "drag-back-1": ("count", True, 30, None),
-    "drag-back-2": ("time", False, None, None),
-    "drag-back-3": ("count", False, None, 8),
-    "scissors-1": ("count", True, 30, None),
-    "scissors-2": ("time", False, None, None),
-    "scissors-3": ("count", False, None, 8),
-    "matthews-1": ("count", True, 30, None),
-    "matthews-2": ("time", False, None, None),
-    "matthews-3": ("count", False, None, 8),
-    "outside-hook-1": ("count", True, 30, None),
-    "outside-hook-2": ("time", False, None, None),
-    "outside-hook-3": ("count", False, None, 8),
-    "cruyff-1": ("count", True, 30, None),
-    "cruyff-2": ("time", False, None, None),
-    "cruyff-3": ("count", False, None, 8),
-    "elastico-1": ("count", True, 30, None),
-    "elastico-2": ("time", False, None, None),
-    "elastico-3": ("count", False, None, 8),
-    "body-feint-1": ("count", True, 30, None),
-    "body-feint-2": ("time", False, None, None),
-    "body-feint-3": ("count", False, None, 8),
+    "toe-taps-30": ("count", False, 30, None, "", None),
+    "foundations-30": ("count", False, 30, None, "", None),
+    "inside-outside-30": ("count", True, 30, None, "", None),
+    "pull-push-30": ("count", True, 30, None, "", None),
+    "combo-step-over-cruyff": ("count", True, 30, None, "", None),
+    "combo-rollover-chop": ("count", True, 30, None, "", None),
+    "combo-double-scissor": ("count", True, 30, None, "", None),
+    "combo-l-turn": ("count", True, 30, None, "", None),
+    "combo-croqueta-chop": ("count", True, 30, None, "", None),
+    "combo-tap-drag-turn": ("count", True, 30, None, "", None),
+    "rebounder-two-touch": ("count", True, 60, None, "", None),
+    "rebounder-one-touch": ("count", True, 60, None, "", None),
+    "rebounder-turn": ("count", True, None, 10, "", None),
+    "rebounder-into-space": ("count", True, None, 10, "", None),
+    "rebounder-cushion": ("count", True, None, 10, "", None),
+    "slalom-race": ("time", False, None, None, "", None),
+    "speed-dribble-race": ("time", False, None, None, "", None),
+    "slow-slow-fast": ("count", False, None, 8, "", None),
+    "corners": ("count", True, None, 5, "", None),
+    "laces-rolling": ("count", True, None, 5, "", None),
+    "rebounder-finish": ("count", True, None, 5, "", None),
+    "volley-finish": ("count", True, None, 5, "", None),
+    "keepy-ups-best": ("count", False, None, None, "", None),
+    "keepy-ups-weak": ("count", False, None, None, "", None),
+    "keepy-ups-alternate": ("count", False, None, None, "", None),
+    "keepy-ups-thighs": ("count", False, None, None, "", None),
+    "free-play": ("none", False, None, None, "", None),
+    "chop-1": ("count", True, 30, None, "chop", 1),
+    "chop-2": ("time", False, None, None, "chop", 2),
+    "chop-3": ("count", False, None, 8, "chop", 3),
+    "drag-back-1": ("count", True, 30, None, "drag-back", 1),
+    "drag-back-2": ("time", False, None, None, "drag-back", 2),
+    "drag-back-3": ("count", False, None, 8, "drag-back", 3),
+    "scissors-1": ("count", True, 30, None, "scissors", 1),
+    "scissors-2": ("time", False, None, None, "scissors", 2),
+    "scissors-3": ("count", False, None, 8, "scissors", 3),
+    "matthews-1": ("count", True, 30, None, "matthews", 1),
+    "matthews-2": ("time", False, None, None, "matthews", 2),
+    "matthews-3": ("count", False, None, 8, "matthews", 3),
+    "outside-hook-1": ("count", True, 30, None, "outside-hook", 1),
+    "outside-hook-2": ("time", False, None, None, "outside-hook", 2),
+    "outside-hook-3": ("count", False, None, 8, "outside-hook", 3),
+    "cruyff-1": ("count", True, 30, None, "cruyff", 1),
+    "cruyff-2": ("time", False, None, None, "cruyff", 2),
+    "cruyff-3": ("count", False, None, 8, "cruyff", 3),
+    "elastico-1": ("count", True, 30, None, "elastico", 1),
+    "elastico-2": ("time", False, None, None, "elastico", 2),
+    "elastico-3": ("count", False, None, 8, "elastico", 3),
+    "body-feint-1": ("count", True, 30, None, "body-feint", 1),
+    "body-feint-2": ("time", False, None, None, "body-feint", 2),
+    "body-feint-3": ("count", False, None, 8, "body-feint", 3),
 }
 
 
 class TestCardMeaningIsFrozen:
-    # Catches a card's scoring, per-foot, timer or out-of being edited in
-    # place, which makes every play already against it mean something else.
+    # Catches a card's scoring, per-foot, timer, out-of, move or level being
+    # edited in place, which makes every play already against it mean
+    # something else.
     def test_no_shipped_card_changes_what_its_score_means(self):
         by_slug = {card["slug"]: card for card in CARDS}
         for slug, frozen in FROZEN_MEANINGS.items():
@@ -130,10 +133,13 @@ class TestCardMeaningIsFrozen:
                 card.get("per_foot", False),
                 card.get("timer_seconds"),
                 card.get("out_of"),
+                card.get("move", ""),
+                card.get("level"),
             )
             assert now == frozen, (
                 f"{slug}: {frozen} -> {now}. a card's meaning changed: give it "
-                "a new slug and put the old one in RETIRED"
+                "a new slug and put the old one in RETIRED (slug, move and level are "
+                "frozen with the scoring)"
             )
 
     # Catches a new card shipping without being frozen, so the guard above
@@ -401,6 +407,9 @@ class TestDeckAdmin:
         body = response.content.decode()
         assert 'name="score"' not in body
         assert 'name="weak_score"' not in body
+        # Nor the stamp: written once on the phone, read by a restored phone.
+        for field in ("points", "medal", "bests"):
+            assert f'name="{field}"' not in body
 
     # Catches the Add button coming back: every field is read-only and the
     # id is made on the phone, so saving the empty form was a 500.

@@ -535,6 +535,19 @@ class Play(models.Model):
     # For a per-foot card, score is the strong foot and weak_score the weak.
     score = models.PositiveIntegerField(null=True, blank=True)
     weak_score = models.PositiveIntegerField(null=True, blank=True)
+
+    # The stamp: what this play was worth in the game, worked out once on the
+    # phone when he saved it and never again (deck_rules.py has the numbers).
+    # Totals, levels and unlocks add these up, so a later change to points or
+    # medal targets can never take back what he earned. Null is a play saved
+    # before the game layer, or by an old cached page, and is worth nothing.
+    NO_MEDAL, BRONZE, SILVER, GOLD = 0, 1, 2, 3
+    MEDAL_CHOICES = [(NO_MEDAL, "None"), (BRONZE, "Bronze"), (SILVER, "Silver"), (GOLD, "Gold")]
+    points = models.PositiveSmallIntegerField(null=True, blank=True)
+    medal = models.PositiveSmallIntegerField(null=True, blank=True, choices=MEDAL_CHOICES)
+    bests = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Feet that beat his best (0-2); a first score is not one."
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

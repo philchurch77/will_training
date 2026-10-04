@@ -113,7 +113,12 @@ class PlayAdmin(NoDeleteMixin, admin.ModelAdmin):
     list_filter = ("card__pack", "date")
     date_hierarchy = "date"
     readonly_fields = (
-        "id", "athlete", "card", "date", "played_at", "score", "weak_score", "created_at",
+        "id", "athlete", "card", "date", "played_at", "score", "weak_score",
+        # The stamp is written once, on the phone: an edit here would never
+        # reach the phone, and would be what a restored phone and 2b's
+        # badges read.
+        "points", "medal", "bests",
+        "created_at",
     )
 
     def has_add_permission(self, request):

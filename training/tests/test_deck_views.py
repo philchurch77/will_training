@@ -302,6 +302,101 @@ class TestPlaysApiRefusals:
         assert body["saved"] == [p["id"] for p in batch[:MAX_BATCH]]
 
 
+# --- D. the stamp: points, medal, bests --------------------------------------
+
+STAMP = {"points": 70, "medal": 2, "bests": 1}
+NO_STAMP = {"points": None, "medal": None, "bests": None}
+
+
+def stored_stamp(play_id):
+    p = Play.objects.get(pk=play_id)
+    return {"points": p.points, "medal": p.medal, "bests": p.bests}
+
+
+class TestPlaysApiStamp:
+    # Catches the stamp being dropped on the way in or on the way back: the
+    # phone fills a lost copy from the server's, and totals add these up.
+    def test_a_stamp_in_range_is_stored_and_returned_unchanged(self, client, deck, will):
+        client.force_login(will)
+        p = play("chop-1", score=12, weak_score=9, **STAMP)
+        assert post(client, [p]).json()["saved"] == [p["id"]]
+        assert stored_stamp(p["id"]) == STAMP
+        [back] = client.get(URL).json()["plays"]
+        assert {k: back[k] for k in STAMP} == STAMP
+
+    # Catches a play from before the game layer (no stamp) being refused or
+    # given a made-up value.
+    def test_a_play_with_no_stamp_is_stored_with_nulls(self, client, deck, will):
+        client.force_login(will)
+        p = play()
+        assert post(client, [p]).json()["saved"] == [p["id"]]
+        assert stored_stamp(p["id"]) == NO_STAMP
+
+    # Catches a bad stamp refusing the play, which would leave a real score
+    # unsent on the phone for good, or a half-kept stamp.
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            {"points": 5000}, {"points": 22.5}, {"points": -1}, {"medal": 4},
+            {"medal": True}, {"bests": 3}, {"bests": "1"}, {"points": {}},
+        ],
+        ids=[
+            "points-huge", "points-float", "points-negative", "medal-4",
+            "medal-bool", "bests-3", "bests-string", "points-object",
+        ],
+    )
+    def test_a_bad_stamp_drops_all_three_fields_and_keeps_the_play(
+        self, client, deck, will, bad
+    ):
+        client.force_login(will)
+        p = play(score=40, **{**STAMP, **bad})
+        body = post(client, [p]).json()
+        assert body["saved"] == [p["id"]]
+        assert body["refused"] == []
+        assert Play.objects.get(pk=p["id"]).score == 40
+        assert stored_stamp(p["id"]) == NO_STAMP
+
+    # Catches a medal claimed on a play with no score at all.
+    def test_a_medal_with_no_score_drops_the_stamp_and_keeps_the_play(
+        self, client, deck, will
+    ):
+        client.force_login(will)
+        p = play(score=None, weak_score=None, points=10, medal=3, bests=0)
+        assert post(client, [p]).json()["saved"] == [p["id"]]
+        assert Play.objects.filter(pk=p["id"]).exists()
+        assert stored_stamp(p["id"]) == NO_STAMP
+
+    # Catches a resend rewriting the stamp: a stamp is written once, so a
+    # later change to the points table never reaches an old play.
+    def test_a_resend_with_a_different_stamp_changes_nothing(self, client, deck, will):
+        client.force_login(will)
+        p = play(**STAMP)
+        post(client, [p])
+        resend = {**p, "points": 110, "medal": 3, "bests": 2}
+        assert post(client, [resend]).json()["saved"] == [p["id"]]
+        assert stored_stamp(p["id"]) == STAMP
+
+    # Catches another account restamping Will's play by guessing its id.
+    def test_another_user_cannot_restamp_wills_play(self, client, deck, will, other):
+        client.force_login(will)
+        p = play(**STAMP)
+        post(client, [p])
+        client.force_login(other)
+        body = post(client, [{**p, "points": 999, "medal": 3, "bests": 2}]).json()
+        assert body["refused"] == [{"id": p["id"], "reason": "id in use"}]
+        assert stored_stamp(p["id"]) == STAMP
+        assert Play.objects.get(pk=p["id"]).athlete == will
+
+    # Catches a stamp opening a way round the staff refusal.
+    def test_a_staff_account_is_still_refused_with_a_stamp(self, client, deck):
+        coach = get_user_model().objects.create_user(
+            username="coach", password="x", is_staff=True
+        )
+        client.force_login(coach)
+        assert post(client, [play(**STAMP)]).status_code == 403
+        assert not Play.objects.exists()
+
+
 # --- F. the page and the service worker --------------------------------------
 
 
@@ -325,6 +420,18 @@ class TestDeckPage:
         assert slugs == set(Card.objects.active().values_list("slug", flat=True))
         assert "chop-1" not in slugs
         assert "training/js/deck.js" in response.content.decode()
+
+    # Catches the rules not reaching the phone: deck.js falls back to no game
+    # at all (every stamp null) when deck-rules is missing or unreadable.
+    def test_the_page_bakes_in_the_rules(self, client, deck, will):
+        client.force_login(will)
+        match = re.search(
+            r'<script id="deck-rules" type="application/json">(.*?)</script>',
+            client.get(reverse("training:deck")).content.decode(), re.S,
+        )
+        assert match, "the rules are no longer baked into the page as deck-rules"
+        rules = json.loads(match.group(1))
+        assert rules["levels"] and rules["calendar"]
 
     # Catches the script being renamed or moved without the page following.
     def test_the_deck_script_exists(self):
@@ -362,6 +469,11 @@ class TestDeckServiceWorker:
     # last week's deck.js.
     def test_the_cache_is_versioned(self, client, deck):
         assert re.search(r"const CACHE = '[^']+-v\d+';", self.body(client))
+
+    # Catches leg 2's deck.js shipping under the old cache name: phones
+    # would keep last deploy's script, which stamps nothing.
+    def test_the_cache_was_bumped_for_the_game_layer(self, client, deck):
+        assert "const CACHE = 'will-training-v21';" not in self.body(client)
 
 
 # --- H. deck.js, read as source ----------------------------------------------
@@ -455,3 +567,63 @@ class TestDeckScript:
         body = self.function_body("csrfToken")
         assert "document.cookie" in body and "csrftoken" in body
         assert "'X-CSRFToken': csrfToken()" in self.compact()
+
+    # Catches makePlay dropping the stamp: wire() and restore() both build
+    # plays through it, so a missing field is lost on every sync.
+    def test_make_play_copies_the_stamp(self):
+        body = self.function_body("makePlay")
+        for field in ("points", "medal", "bests"):
+            assert f"{field}: nullable(fields.{field})" in body, field
+
+    # Catches restore() overwriting a stamp the phone already has, or never
+    # filling one it lost.
+    def test_restore_fills_only_null_stamp_fields_from_the_server(self):
+        body = self.function_body("restore")
+        assert "['points', 'medal', 'bests']" in body
+        assert re.search(
+            r"if \(local\[field\] === null && s\[field\] !== null[^)]*\) \{ local\[field\] = s\[field\];",
+            body,
+        )
+
+    # Catches a medal being worked out a second time somewhere else, against
+    # today's targets rather than the ones the play was stamped with.
+    def test_stamp_is_the_only_caller_of_medal_for(self):
+        assert self.source().count("medalFor(") == 2
+        assert "medalFor(card, score, weak)" in self.function_body("stamp")
+
+    # Catches a locked level being dealt, or kept in a stored hand.
+    def test_deal_and_the_stored_hand_skip_locked_cards(self):
+        assert "isOpen(c, plays)" in self.function_body("deal")
+        assert "isOpen(BY_SLUG[s], plays)" in self.function_body("currentHand")
+
+    # Catches a game number copied into deck.js: there is no JS test runner,
+    # so a copy could drift from deck_rules.py with nothing to notice.
+    def test_no_game_number_is_written_into_the_script(self):
+        # `seconds * 1000` is milliseconds in runTimedBar, not a level.
+        source = re.sub(r"\*\s*1000\b", "* MS", self.source())
+        for threshold in ("300", "1000", "2500", "5000"):
+            assert not re.search(rf"\b{threshold}\b", source), threshold
+        assert not re.search(r"\b(base|weak_foot|best|skill_multiplier)\s*:\s*\d", source)
+        assert "RULES.points" in self.function_body("stamp")
+
+    # Catches a first score of 0 counting as a best to beat, which turns any
+    # next score into a bonus and a "New best!".
+    def test_a_zero_best_is_no_best_in_stamp_and_verdict(self):
+        assert "realBest(value) { return value === 0 ? null : value; }" in self.compact()
+        assert "realBest(before.score) !== null" in self.function_body("stamp")
+        assert "realBest(best) === null" in self.function_body("verdict")
+
+    # Catches free play saving silently again: a level-up it caused was
+    # applied and never shown.
+    def test_free_play_shows_what_it_earned(self):
+        body = self.function_body("freePlayButton")
+        assert "gameState(" in body
+        assert "rewardLines(" in body
+        assert "flashCard()" in self.function_body("renderHand")
+
+    # Catches the game layer reaching into the timed bar: points or medals
+    # on a timer are a number counting at him.
+    def test_the_timed_bar_knows_nothing_of_the_game(self):
+        body = self.function_body("runTimedBar")
+        for banned in ("RULES", "points", "medal", "stamp", "level"):
+            assert banned not in body, f"runTimedBar mentions {banned}"

@@ -26,7 +26,7 @@ uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see b
 uv run manage.py set_pin will 4321
 uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
 uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, before hand-over only
-uv run pytest                    # 357 tests, ~6 min
+uv run pytest                    # 397 tests, ~6 min
 uv run pytest training/tests/test_seed.py -q    # just the coaching rules
 ```
 
@@ -206,6 +206,27 @@ static/training/js/deck.js   everything he sees and does on /deck/
   the plays against it mean, so it is a new slug with the old one put in
   `RETIRED`. `api_plays` accepts plays on retired cards: the phone has no
   other copy to send.
+- **A play is stamped once, on the phone, when he saves it** (leg 2a):
+  `points`, `medal`, `bests` on `Play`, never worked out again. Totals, his
+  level and which move levels are open are sums and maxes of stamps, so a
+  change to points or medal targets never takes back what he earned. Null is
+  an unstamped play - from before 2a or an old cached page - and is worth
+  nothing. A bad stamp is dropped, never a reason to refuse the play: a real
+  score must not be lost over what it was worth. `restore()` fills a missing
+  stamp from the server, nulls only.
+- **Every game number lives in `deck_rules.py`** and reaches the phone as the
+  `deck-rules` block; `deck.js` keeps none of its own beyond the game's shape
+  (three medals, three levels per move). **Level thresholds may go down,
+  never up** - raising one takes a level off him, and `test_deck_rules.py`
+  holds the ceilings. The skill of the week starts on `BLOCKS_START` and is
+  None before it, so nothing is stamped double early.
+- **A card's slug, move and level never change** - only retired, like drills.
+  Unlocks look up the gate card by move and level and read its stamped
+  medals by slug, so moving either re-locks a level he opened.
+  `FROZEN_MEANINGS` in `test_deck.py` holds them.
+- **Gold on a move level opens the next.** A locked card is never dealt and
+  cannot be played; it shows "Locked" and what opens it. The Moves card in his
+  hand is always the skill of the week at its highest open level.
 - **The hand** is five cards from five packs: always one Moves card and one
   Quick feet or Combos card. It is the same all day until he deals again.
   Free play is a button, not a card in the hand.

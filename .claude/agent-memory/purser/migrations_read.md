@@ -42,3 +42,10 @@ nothing else. `sqlmigrate` is two `CREATE TABLE` + two `CREATE INDEX`: no
 table rebuild, no existing table touched. Additive, loses nothing. Committed
 in 4914d36 and already on `origin/main`, so treat it as possibly applied on
 Render: never edit it, add 0009 instead. `makemigrations --check` clean at 0008.
+
+**0009_play_stamps (read 2026-10-03, uncommitted on deck-step-2)** — three
+nullable `PositiveSmallIntegerField` AddFields on Play (`points`, `medal`,
+`bests`). `sqlmigrate` is three plain `ALTER TABLE ADD COLUMN ... NULL CHECK
+(>=0)`: **no table rebuild** (nullable, no default => SQLite ADD COLUMN, unlike
+0007). Existing rows get NULL, which passes the CHECK. Additive, loses nothing.
+Applied on dev; `makemigrations --check` clean at 0009.

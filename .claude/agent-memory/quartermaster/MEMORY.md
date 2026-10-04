@@ -1,4 +1,5 @@
 - [Seed data decisions](decisions_seed_data.md) — retire rather than rewrite or delete a drill; warm-up structure, move-naming rulings, plan slot arithmetic, which tests filter `is_active`.
 - [The seeder runs on Render](seeder_runs_on_render.md) — every seed edit is a live data change; `--reset` would destroy his history.
 - [Deck leg 1 decisions](decisions_deck.md) — localStorage keys, hand rule, CSRF-from-cookie sync, SW must skip /api/, card-meaning changes need a new slug.
+- [Deck leg 2 decisions](decisions_deck_leg2.md) — per-play stamps (points/medal/bests), rules baked from Python, badges at sync, 2a/2b split.
 - [The developer's coaching voice](user_coaching_voice.md) — his drill lists are coaching briefs; expect duplicates and naming collisions, and say so.
