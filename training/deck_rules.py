@@ -143,16 +143,15 @@ def rules_json(today, history=None):
 
 # --- the head start: his old app's history ----------------------------------
 # Worked out from his SessionLog rows every time the deck loads and written
-# nowhere, so it cannot be got wrong and days he trains on Today before the
-# switch-over still count. See docs/chart/deck.md, "Leg 3 decisions".
+# nowhere, so it cannot be got wrong. Since leg 3d nothing adds or removes a
+# SessionLog (the tick endpoints are gone and the admin refuses both), so the
+# points are fixed. See docs/chart/deck.md, "Leg 3 decisions".
 
 # Points per old drill he ticked, and the most the old app can give him. Once
 # he has seen his head start these may go up, never down: lowering either
-# could take a level off him. Unticking a drill on Today (drill_uncomplete
-# deletes the row) lowers it by 5 below the cap - a same-day undo of his own,
-# accepted, and gone when 3d retires the tick endpoints. The same goes for
-# his inherited best: a count edited on Coach -> His sessions, or unticked,
-# moves the number shown on the card. Stamps already made never change.
+# could take a level off him. A count edited on the Coach screen moves
+# only his inherited best on the three cards below, never the points.
+# Stamps already made never change.
 STARTING_POINTS_PER_TICK = 5
 STARTING_POINTS_CAP = 1000
 
@@ -355,9 +354,8 @@ def award_deck_badges(athlete, today):
     badges awarded now.
 
     The kept badges count old ticks and card plays together, through
-    progress.kept_badge_values - the same numbers a tick on Today awards
-    them from, so the two paths cannot disagree. Never deletes or revokes;
-    progress.award is the one award step, savepoint and all.
+    progress.kept_badge_values. Never deletes or revokes; progress.award is
+    the one award step, savepoint and all.
     """
     from .models import Badge
     # Lazy: progress imports this module at the top, so the reverse import

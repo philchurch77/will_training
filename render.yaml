@@ -19,8 +19,8 @@ services:
     # migrate and seed_drills run here rather than in build.sh: the disk below
     # is only mounted at runtime, so the database does not exist during the
     # build. Both are safe to repeat - migrate applies only new migrations,
-    # and seed_drills updates the drills in place and leaves logged sessions
-    # alone.
+    # and seed_drills updates skills, drills (all inactive), badges and cards
+    # in place, never deletes, and leaves logged sessions and plays alone.
     #
     # One worker on purpose: two users, and the login throttle keeps its
     # counters in local memory, which only works within a single process.

@@ -43,3 +43,13 @@ showed main at baff415. render.yaml sets no autoDeploy, so Render's default
 deploys every push to main: 2a+2b+3a+3b (migrations 0009+0010) went to main in
 one merge, not in the chart's staged order. Always `git ls-remote origin` /
 `gh pr list` before believing a briefed deploy order.
+
+**Leg 3d (2026-10-04):** `--reset` removed entirely (not just guarded) - do not
+look for TestResetIsRefused any more. startCommand unchanged.
+**Backup filename collides within a day:** the CLAUDE.md command names the file
+by date only, so a second deploy on the same date overwrites the earlier
+backup (3c and 3d both 2026-10-04). Tell the developer to add a suffix.
+For behavioural deploys with no migration, record the Before-the-cards figures
+via `manage.py shell -c` on the old code and again after; the function names
+(longest_streak, drills_completed, total_minutes, minutes_by_skill, best_scores,
+deck_rules.history_for) exist on both 3c and 3d.

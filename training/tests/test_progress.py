@@ -29,59 +29,6 @@ def tick(will, drill, day, **kwargs):
     return SessionLog.objects.create(athlete=will, date=day, drill=drill, **kwargs)
 
 
-class TestCurrentStreak:
-    def test_no_sessions_means_no_streak(self, will, plan):
-        assert progress.current_streak(will, WEDNESDAY) == 0
-
-    def test_consecutive_days_build_up(self, will, plan, drill):
-        tick(will, drill, MONDAY)
-        tick(will, drill, TUESDAY)
-        tick(will, drill, WEDNESDAY)
-        assert progress.current_streak(will, WEDNESDAY) == 3
-
-    def test_one_drill_is_enough_to_count_the_day(self, will, plan, drill, rep_drill):
-        # He has four drills scheduled but only did one. The day still counts.
-        tick(will, drill, MONDAY)
-        assert progress.current_streak(will, MONDAY) == 1
-
-    def test_a_missed_training_day_breaks_it(self, will, plan, drill):
-        tick(will, drill, MONDAY)
-        # Tuesday missed - it is a required day in the fixture plan.
-        tick(will, drill, WEDNESDAY)
-        assert progress.current_streak(will, WEDNESDAY) == 1
-
-    def test_a_rest_day_does_not_break_it(self, will, plan, drill):
-        """Sunday is a rest day in the fixture plan."""
-        tick(will, drill, SATURDAY)
-        tick(will, drill, MONDAY + timedelta(days=7))  # the following Monday
-        # Sat done, Sun rest (skipped), Mon done -> 2
-        assert progress.current_streak(will, MONDAY + timedelta(days=7)) == 2
-
-    def test_an_optional_day_does_not_break_it(self, will, plan, drill):
-        """Saturday is optional (match day) in the fixture plan."""
-        tick(will, drill, THURSDAY)
-        tick(will, drill, date(2026, 8, 14))  # Friday, a required day
-        # Sat optional and skipped, Sun rest and skipped, then Monday.
-        tick(will, drill, MONDAY + timedelta(days=7))
-        assert progress.current_streak(will, MONDAY + timedelta(days=7)) == 3
-
-    def test_today_not_done_yet_keeps_yesterdays_streak(self, will, plan, drill):
-        tick(will, drill, MONDAY)
-        tick(will, drill, TUESDAY)
-        # It is Wednesday morning and he has not trained yet.
-        assert progress.current_streak(will, WEDNESDAY) == 2
-
-    def test_a_gap_before_today_still_breaks_it(self, will, plan, drill):
-        tick(will, drill, MONDAY)
-        # Tuesday missed, and it is now Wednesday with nothing done.
-        assert progress.current_streak(will, WEDNESDAY) == 0
-
-    def test_streak_survives_with_no_plan_at_all(self, will, drill):
-        """With no active plan nothing is 'required', so nothing breaks."""
-        tick(will, drill, MONDAY)
-        assert progress.current_streak(will, WEDNESDAY) == 1
-
-
 class TestLongestStreak:
     def test_finds_the_best_run(self, will, plan, drill):
         for day in (MONDAY, TUESDAY, WEDNESDAY):
@@ -96,19 +43,6 @@ class TestLongestStreak:
 
 
 class TestMonthlyAndTotals:
-    def test_sessions_this_month_counts_days_not_drills(
-        self, will, plan, drill, rep_drill
-    ):
-        tick(will, drill, MONDAY)
-        tick(will, rep_drill, MONDAY)  # same day, second drill
-        tick(will, drill, TUESDAY)
-        assert progress.sessions_this_month(will, MONDAY) == 2
-
-    def test_last_month_is_not_counted(self, will, plan, drill):
-        tick(will, drill, date(2026, 7, 30))
-        tick(will, drill, MONDAY)
-        assert progress.sessions_this_month(will, MONDAY) == 1
-
     def test_total_minutes_uses_actuals_when_present(self, will, plan, drill, rep_drill):
         tick(will, drill, MONDAY, actual_minutes=8)
         tick(will, rep_drill, MONDAY)  # no actual -> 5 minute default
@@ -152,74 +86,6 @@ class TestMonthlyAndTotals:
         assert progress.drills_completed(will) == 2
 
 
-class TestFortnight:
-    """Each day runs two sessions and alternates between them.
-
-    The point is variety - one week can only reach 36 of the 50 drills - but
-    the machinery has to be exact, because the perfect-week badge asks whether
-    he did *that* week's session, not the other one.
-    """
-
-    def test_consecutive_weeks_alternate(self, db):
-        for offset in range(0, 70, 7):
-            first = MONDAY + timedelta(days=offset)
-            second = first + timedelta(days=7)
-            assert progress.week_of(first) != progress.week_of(second)
-
-    def test_a_whole_week_sits_in_one_half_of_the_fortnight(self, db):
-        """Mon to Sun must not straddle the two, or the perfect-week badge
-        would be asking for half of each session."""
-        for offset in range(0, 28, 7):
-            monday = MONDAY + timedelta(days=offset)
-            week = {
-                progress.week_of(monday + timedelta(days=n)) for n in range(7)
-            }
-            assert len(week) == 1, monday
-
-    def test_the_year_boundary_does_not_repeat_a_week(self, db):
-        """ISO week numbers would: some years have 53 of them, so weeks 53 and
-        1 are both odd and he would get the same session twice running."""
-        for monday in (date(2026, 12, 21), date(2026, 12, 28), date(2027, 1, 4)):
-            nxt = monday + timedelta(days=7)
-            assert progress.week_of(monday) != progress.week_of(nxt), monday
-
-    def test_the_session_changes_from_one_week_to_the_next(self, will, fortnight):
-        this_week = [d.slug for d in progress.session_for(MONDAY)[1]]
-        next_week = [d.slug for d in progress.session_for(MONDAY + timedelta(days=7))[1]]
-
-        assert this_week != next_week
-        assert "test-every-week" in this_week and "test-every-week" in next_week
-        assert set(this_week) | set(next_week) == {
-            "test-every-week", "test-week-a", "test-week-b",
-        }
-
-    def test_a_perfect_week_means_that_week_s_session(self, will, fortnight):
-        """Doing week A's drills during a week B is not a perfect week - it is
-        the wrong session."""
-        from training.models import Drill, PlanDrill
-
-        # Find a Monday that is week A, then do week B's session in it.
-        monday = MONDAY
-        if progress.week_of(monday) != PlanDrill.WEEK_A:
-            monday += timedelta(days=7)
-        assert progress.week_of(monday) == PlanDrill.WEEK_A
-
-        tick(will, Drill.objects.get(slug="test-week-b"), monday)
-        tick(will, Drill.objects.get(slug="test-every-week"), monday)
-        assert progress.perfect_weeks(will, monday + timedelta(days=6)) == 0
-
-    def test_doing_the_right_session_earns_the_perfect_week(self, will, fortnight):
-        from training.models import Drill, PlanDrill
-
-        week = progress.week_of(MONDAY)
-        right = Drill.objects.get(
-            slug="test-week-a" if week == PlanDrill.WEEK_A else "test-week-b"
-        )
-        tick(will, right, MONDAY)
-        tick(will, Drill.objects.get(slug="test-every-week"), MONDAY)
-        assert progress.perfect_weeks(will, MONDAY + timedelta(days=6)) == 1
-
-
 class TestPersonalBests:
     """His own number is the one worth beating.
 
@@ -239,13 +105,6 @@ class TestPersonalBests:
 
     def test_a_timed_drill_has_no_best(self, will, plan, drill):
         assert progress.personal_best(will, drill) is None
-
-    def test_a_day_can_be_left_out_of_the_reckoning(self, will, plan, rep_drill):
-        """Today's row is overwritten by the tick, so working out whether the
-        number he just posted is a record means reading the best without it."""
-        tick(will, rep_drill, MONDAY, actual_reps=40)
-        tick(will, rep_drill, TUESDAY, actual_reps=12)
-        assert progress.personal_best(will, rep_drill, before=TUESDAY) == 40
 
     def test_the_record_board_skips_drills_he_has_never_counted(
         self, will, plan, drill, rep_drill
@@ -314,42 +173,6 @@ class TestMinutesBySkill:
         assert all(r["percent"] == 0 for r in rows)
 
 
-class TestBadges:
-    def test_awards_when_the_threshold_is_reached(self, will, seeded, drill):
-        from training.models import Drill, EarnedBadge
-
-        real = Drill.objects.get(slug="toe-taps")
-        tick(will, real, MONDAY)
-        earned = progress.award_badges(will, MONDAY)
-
-        codes = {b.code for b in earned}
-        assert "first-session" in codes
-        assert EarnedBadge.objects.filter(athlete=will, badge__code="first-session").exists()
-
-    def test_never_awards_the_same_badge_twice(self, will, seeded):
-        from training.models import Drill, EarnedBadge
-
-        real = Drill.objects.get(slug="toe-taps")
-        tick(will, real, MONDAY)
-        progress.award_badges(will, MONDAY)
-        second = progress.award_badges(will, MONDAY)
-
-        assert second == []
-        assert EarnedBadge.objects.filter(athlete=will).count() == 1
-
-    # Catches a retired badge being awarded again: the day streaks retired at
-    # the switch-over (leg 3c), so three days in a row earns no streak-3.
-    def test_a_retired_streak_badge_is_never_awarded(self, will, seeded):
-        from training.models import Drill
-
-        real = Drill.objects.get(slug="toe-taps")
-        for day in (MONDAY, TUESDAY, WEDNESDAY):
-            tick(will, real, day)
-        assert progress.current_streak(will, WEDNESDAY) >= 3
-        earned = progress.award_badges(will, WEDNESDAY)
-        assert "streak-3" not in {b.code for b in earned}
-
-
 def make_badge(code, kind, threshold=0, is_active=True):
     # Threshold 0: anything that looks at the badge at all would award it.
     return Badge.objects.create(
@@ -362,17 +185,6 @@ class TestBadgesAfterTheDeck:
     """Deck badges are worked out from plays, at sync; the old award must
     leave them alone. A retired badge is never awarded, and one he earned
     stays on his record as a Legend."""
-
-    # Catches award_badges reading a deck kind as 0 >= threshold and handing
-    # it out from ticks, or awarding a retired badge.
-    def test_award_badges_never_awards_a_deck_or_retired_badge(self, will, plan):
-        from training.models import EarnedBadge
-
-        deck_badge = make_badge("test-deck", Badge.FREE_PLAYS)
-        retired = make_badge("test-retired", Badge.TOTAL_DRILLS, is_active=False)
-        earned = progress.award_badges(will, MONDAY)
-        assert deck_badge not in earned and retired not in earned
-        assert not EarnedBadge.objects.filter(badge__in=[deck_badge, retired]).exists()
 
     # Catches retiring a badge taking it off his record: one he earned stays,
     # tagged Legend, in the badge list his Progress tab draws.
@@ -388,91 +200,6 @@ class TestBadgesAfterTheDeck:
         EarnedBadge.objects.create(athlete=will, badge=retired, earned_on=MONDAY)
         [shown] = [r for r in deck_badges_in(client.get("/")) if r["code"] == "test-retired"]
         assert shown["legend"] is True and shown["earned"] is True
-
-
-class TestTodaySummary:
-    def test_marks_what_is_already_done(self, will, plan, drill):
-        summary = progress.today_summary(will, MONDAY)
-        assert summary["total_count"] == 1
-        assert summary["done_count"] == 0
-        assert not summary["all_done"]
-
-        tick(will, drill, MONDAY)
-        summary = progress.today_summary(will, MONDAY)
-        assert summary["done_count"] == 1
-        assert summary["all_done"]
-
-    def test_rest_day_has_no_drills(self, will, plan):
-        summary = progress.today_summary(will, SUNDAY)
-        assert summary["plan_day"].is_rest
-        assert summary["rows"] == []
-
-
-class TestPerfectWeeks:
-    """The plan fixture: Mon-Fri required with one drill each, Sat optional,
-    Sun rest. So a perfect week is Mon-Fri done in full."""
-
-    WEEKDAYS = (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)
-
-    def test_nothing_done_is_no_weeks(self, will, plan):
-        assert progress.perfect_weeks(will, SUNDAY) == 0
-
-    def test_every_required_day_in_full(self, will, plan, drill):
-        for day in self.WEEKDAYS:
-            tick(will, drill, day)
-        assert progress.perfect_weeks(will, SUNDAY) == 1
-
-    def test_the_optional_and_rest_days_are_not_needed(self, will, plan, drill):
-        # He trained Mon-Fri and rested Sat and Sun, exactly as asked. That is
-        # a perfect week - the same rule that stops a rest day breaking a streak.
-        for day in self.WEEKDAYS:
-            tick(will, drill, day)
-        assert SATURDAY not in progress.completed_dates(will)
-        assert progress.perfect_weeks(will, SUNDAY) == 1
-
-    def test_one_missed_day_loses_the_week(self, will, plan, drill):
-        for day in self.WEEKDAYS:
-            if day != THURSDAY:
-                tick(will, drill, day)
-        assert progress.perfect_weeks(will, SUNDAY) == 0
-
-    def test_half_a_session_is_not_a_perfect_day(self, will, plan, drill, rep_drill):
-        # Two drills on the Monday, only one of them ticked. A streak would
-        # survive this; a perfect week must not.
-        PlanDrill.objects.create(
-            plan_day=PlanDay.objects.get(plan=plan, weekday=0), drill=rep_drill, order=2
-        )
-        for day in self.WEEKDAYS:
-            tick(will, drill, day)
-        assert progress.current_streak(will, FRIDAY) == 5
-        assert progress.perfect_weeks(will, SUNDAY) == 0
-
-        tick(will, rep_drill, MONDAY)
-        assert progress.perfect_weeks(will, SUNDAY) == 1
-
-    def test_weeks_accumulate(self, will, plan, drill):
-        for day in self.WEEKDAYS:
-            tick(will, drill, day)
-            tick(will, drill, day + timedelta(days=7))
-        assert progress.perfect_weeks(will, SUNDAY + timedelta(days=7)) == 2
-
-    def test_awards_the_badge(self, will, plan, drill):
-        # Its own badge rather than the seeded one: the `seeded` fixture would
-        # activate the real plan instead of this fixture's.
-        badge = Badge.objects.create(
-            code="test-perfect-week",
-            name="Perfect week",
-            description="Every drill, every training day.",
-            kind=Badge.PERFECT_WEEKS,
-            threshold=1,
-        )
-        for day in (MONDAY, TUESDAY, WEDNESDAY):
-            tick(will, drill, day)
-        assert badge not in progress.award_badges(will, WEDNESDAY)
-
-        for day in (THURSDAY, FRIDAY):
-            tick(will, drill, day)
-        assert badge in progress.award_badges(will, SUNDAY)
 
 
 class TestRetiringADrillDoesNotMoveHisHistory:
@@ -500,23 +227,19 @@ class TestRetiringADrillDoesNotMoveHisHistory:
             tick(will, rep_drill, day)
 
         before = (
-            progress.current_streak(will, THURSDAY),
             progress.longest_streak(will),
             progress.total_minutes(will),
             progress.drills_completed(will),
-            progress.sessions_this_month(will, THURSDAY),
         )
         # Guard the guard: an all-zero "before" would pass whatever happened.
-        assert before == (4, 4, 40, 8, 4)
+        assert before == (4, 40, 8)
 
         self.retire(drill, rep_drill)
 
         after = (
-            progress.current_streak(will, THURSDAY),
             progress.longest_streak(will),
             progress.total_minutes(will),
             progress.drills_completed(will),
-            progress.sessions_this_month(will, THURSDAY),
         )
         assert after == before
 

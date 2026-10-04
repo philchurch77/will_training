@@ -10,7 +10,6 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.urls import reverse
 
 WEEKDAYS = [
     (0, "Monday"),
@@ -66,14 +65,6 @@ class Skill(models.Model):
     def __str__(self):
         return self.name
 
-    def get_absolute_url(self):
-        return reverse("training:library_skill", args=[self.slug])
-
-
-class DrillQuerySet(models.QuerySet):
-    def active(self):
-        return self.filter(is_active=True)
-
 
 class Drill(models.Model):
     """One thing Will can do alone with a ball, a wall and a few cones."""
@@ -113,7 +104,6 @@ class Drill(models.Model):
     )
     is_active = models.BooleanField(default=True)
 
-    objects = DrillQuerySet.as_manager()
 
     class Meta:
         ordering = ["skill__order", "difficulty", "name"]
@@ -130,9 +120,6 @@ class Drill(models.Model):
     def __str__(self):
         return self.name
 
-    def get_absolute_url(self):
-        return reverse("training:drill", args=[self.slug])
-
     def clean(self):
         if (self.duration_minutes is None) == (self.target_reps is None):
             raise ValidationError(
@@ -148,28 +135,11 @@ class Drill(models.Model):
     def target_label(self):
         """Short label, e.g. '5 min' or '50 reps'.
 
-        His screens only ever use it for the rep-based drills: a number of
-        keepy-ups is something to beat, but a length is something to stop at,
-        and he stopped. The coach screens use both, because that is where the
-        plan is balanced to thirty minutes a day.
+        Admin only since the plan was retired (leg 3d).
         """
         if self.is_timed:
             return f"{self.duration_minutes} min"
         return f"{self.target_reps} reps"
-
-    @property
-    def equipment(self):
-        """List of (emoji, label) pairs for the kit this drill needs."""
-        items = []
-        if self.needs_ball:
-            items.append(("⚽", "Ball"))
-        if self.needs_wall:
-            items.append(("\U0001f9f1", "Wall"))
-        if self.needs_cones:
-            items.append(("\U0001f6a9", "Cones"))
-        if self.needs_space:
-            items.append(("\U0001f333", "Space"))
-        return items
 
     @property
     def estimated_minutes(self):
@@ -193,15 +163,6 @@ class TrainingPlan(models.Model):
 
     def __str__(self):
         return self.name
-
-    @classmethod
-    def get_active(cls):
-        return cls.objects.filter(is_active=True).first()
-
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        if self.is_active:
-            TrainingPlan.objects.exclude(pk=self.pk).update(is_active=False)
 
 
 class PlanDay(models.Model):
@@ -227,21 +188,6 @@ class PlanDay(models.Model):
 
     def __str__(self):
         return f"{self.get_weekday_display()} - {self.label}"
-
-    def drills_for_week(self, week):
-        """The running order for one half of the fortnight.
-
-        Takes PlanDrill.WEEK_A or WEEK_B. Fixtures (EVERY_WEEK) appear in both.
-        """
-        items = self.items.filter(
-            models.Q(week=PlanDrill.EVERY_WEEK) | models.Q(week=week)
-        ).select_related("drill__skill").order_by("order", "pk")
-        return [item.drill for item in items]
-
-    @property
-    def is_required(self):
-        """A day Will is expected to train. Drives the streak."""
-        return not (self.is_rest or self.is_optional)
 
 
 class PlanDrill(models.Model):
@@ -374,9 +320,8 @@ class Badge(models.Model):
     JUGGLING = "juggling"
     PERFECT_WEEKS = "perfect_weeks"
     # The deck's badges (leg 2b). Worked out on the server from Play rows by
-    # deck_rules.deck_badge_values and awarded at sync - never by
-    # progress.award_badges. Shown with every other badge on the Progress tab.
-    # DECK_KINDS also bounds clear_trial_plays: only these are ever cleared.
+    # deck_rules.deck_badge_values and awarded at sync. Shown with every other
+    # badge on the Progress tab.
     GOAL_WEEKS_RUN = "goal_weeks_run"
     GOAL_WEEKS_TOTAL = "goal_weeks_total"
     MOVE_GOLDS = "move_golds"
@@ -406,8 +351,7 @@ class Badge(models.Model):
     })
     # The old badges kept through the switch-over (leg 3b). They count old
     # ticks and card plays together - progress.kept_badge_values is the one
-    # place that adds them up - and both a tick on Today and a deck sync award
-    # them. Never cleared by clear_trial_plays: he earned them from real ticks.
+    # place that adds them up - and a deck sync awards them.
     KEPT_KINDS = frozenset({TOTAL_DRILLS, SKILLS_TRIED, WEAK_FOOT, JUGGLING})
 
     code = models.SlugField(max_length=40, unique=True)

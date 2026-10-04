@@ -1,8 +1,8 @@
-- [Migrations read so far](migrations_read.md) — 0001-0010, one line each; table rebuilds on SQLite: 0007 and 0010 (badge). Legs 3a/3b/3c added none.
+- [Migrations read so far](migrations_read.md) — 0001-0010, one line each; rebuilds on SQLite: 0007, 0010. Legs 3a-3d added none.
 - [Cascade map](cascades.md) — every `on_delete` in `training/models.py`, what each one would take with it, and which are accepted.
-- [Deploy data safety](deploy_data_safety.md) — what runs on Render, `--reset` guard, backup command; check ls-remote, local main goes stale.
+- [Deploy data safety](deploy_data_safety.md) — what runs on Render, --reset gone (3d), backup command + same-day name collision; check ls-remote.
 - [Free text and round trips](free_text_fields.md) — which fields hold typed text and why the edit path is currently sound.
-- [The plan is read as it stands today](plan_has_no_history.md) — accepted consequence: changing the seeded plan re-scores past perfect weeks.
+- [The plan is read as it stands today](plan_has_no_history.md) — superseded by 3d: plan no longer read; streak uses frozen REST_WEEKDAYS={6}.
 - [Three tests fail on Sundays](sunday_test_flake.md) — a date-dependent fixture flake, not a regression. Check the weekday before blaming a diff.
-- [How retirement works](retirement_mechanism.md) — one `is_active` flag, already covered by tests; the only thing left to audit per batch.
-- [Deck sync](deck_sync.md) — plays, stamps, badges; 3c reviewed 2026-10-04: deck at /, nothing deletes a Play or EarnedBadge now.
+- [How retirement works](retirement_mechanism.md) — since 3d every drill inactive, RETIRED gone; nothing live reads Drill.is_active.
+- [Deck sync](deck_sync.md) — plays, stamps, badges, old tick queue; 3d reviewed 2026-10-04: no tick endpoints, nothing deletes anything.

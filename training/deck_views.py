@@ -250,7 +250,8 @@ def _deck_badges_json(athlete):
 
 def _earned_codes(athlete):
     """Every badge he has, so the phone's cache knows them as earned rather
-    than news - one won on Today is not celebrated again on the deck."""
+    than news - one already earned (a Legend, or one from before the cards) is
+    never celebrated again."""
     return list(
         EarnedBadge.objects.filter(athlete=athlete).values_list("badge__code", flat=True)
     )

@@ -153,12 +153,12 @@ class TestOfflineShellAfterSwitch:
         assert not [u for u in urls if "session.js" in u or "drill.js" in u]
         assert "/today/" not in urls
 
-    # Catches 3c's deck.js and base.html shipping under 3b's cache name:
-    # phones would keep the old tab bar pointing at Today.
-    def test_the_cache_was_bumped_for_the_switch(self, client, deck):
+    # Catches 3d's app.js (no tick queue) shipping under 3c's cache name:
+    # phones would keep the old script. Bump this with every static change.
+    def test_the_cache_was_bumped_past_the_switch(self, client, deck):
         body = self.sw(client)
-        assert "const CACHE = 'will-training-v25';" in body
-        assert "const CACHE = 'will-training-v24';" not in body
+        assert "const CACHE = 'will-training-v26';" in body
+        assert "will-training-v25'" not in body
 
     # Catches the shortcuts still pointing at the retired screens, or the id
     # moving and orphaning the icon on his phone.
@@ -170,31 +170,6 @@ class TestOfflineShellAfterSwitch:
 
 
 # --- 4-5. ticks queued before the switch -------------------------------------
-
-
-class TestQueuedTicksStillLand:
-    # Catches the offline replay reloading `/` (now the deck) with ?done=,
-    # which the deck ignores, instead of Today.
-    def test_app_js_replays_to_today(self):
-        source = _source("training/static/training/js/app.js")
-        assert "'/today/?done='" in source
-        assert "'/?done='" not in source
-
-    # Catches the tick URL moving: a tick queued on his phone before the
-    # deploy replays to the address it stored, and must still be saved.
-    # Queued two days ago (inside the 14-day replay window), sent after.
-    def test_a_queued_tick_is_saved(self, client, will, rep_drill):
-        queued_on = timezone.localdate() - timedelta(days=2)
-        client.force_login(will)
-        response = client.post(
-            reverse("training:drill_complete", args=[rep_drill.slug]),
-            {"date": queued_on.isoformat(), "session_seconds": "600"},
-        )
-        assert response.status_code in (200, 302)
-        assert SessionLog.objects.filter(
-            athlete=will, date=queued_on, drill=rep_drill, completed=True
-        ).exists()
-        assert SessionClock.objects.get(athlete=will, date=queued_on).seconds == 600
 
 
 # --- 6-7. read-only history and the tab bar ----------------------------------
@@ -217,7 +192,7 @@ class TestReadOnlyAndTabBar:
         nav = re.search(r'<nav class="tabbar">(.*?)</nav>', page, re.S).group(1)
         hrefs = re.findall(r'href="([^"]+)"', nav)
         assert hrefs == ["/", "/#progress"]
-        assert reverse("training:library") not in page
+        assert 'href="/library/"' not in page
         assert 'id="clockchip"' not in page
         assert "session.js" not in page
 

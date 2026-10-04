@@ -41,3 +41,9 @@ is a `TextField` and the longest is ~302 chars. No non-ASCII, no CR, no tabs
 in the seeded text.
 
 See [[free-text-fields]] and [[plan-has-no-history]].
+
+**Leg 3d (2026-10-04):** `RETIRED` deleted; every DRILLS row seeded
+`is_active=False`. DRILLS/SKILLS/BADGES/JUGGLING/COMBINATIONS data identical
+to 3c (ast compare). No live code reads `Drill.is_active` now (only DrillAdmin
+list). `best_scores` reads all rep drills, so the rep-drill caveat is closed.
+Hand-added drills (not in DRILLS) stay active - harmless, nothing reads it.

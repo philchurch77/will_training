@@ -1,46 +1,24 @@
-"""Create the starter drill library, the weekly plan, the badges and Will's
-profile.
+"""Seed the skills, the drills, the badges, the deck and Will's profile.
 
-Coaching principles baked into this data, for a 9-year-old in academy football:
+The fixed plan was retired in leg 3d (docs/chart/deck.md). The drills below are
+what his SessionLog rows from before the cards point at: frozen history, kept
+so a fresh or restored database still names every session he logged. Every one
+is seeded inactive. None is ever deleted - SessionLog.drill is CASCADE - and
+none is ever rewritten: his June logs must not start claiming he did something
+else. JUGGLING and COMBINATIONS stay because the kept badges and the drill
+flags read them (Keepy-up king counts is_juggling ticks).
 
-* Ball mastery and first touch are the priority. Technique over fitness.
-* Every drill is doable alone, in a garden or a park, with a ball, a wall and a
-  few cones. A wall does the job of a passing partner.
-* Both feet feature everywhere, and every session has explicit weak-foot work.
-* Short speed work is in - accelerations, a first touch and a burst after it,
-  a dribble at full pelt. No weights, no plyometrics, no distance running.
-* Every session includes juggling. Keepy-ups are the drill he will do for
-  the fun of it, and they are pure first touch.
-* Nothing lasts longer than five minutes. Each session is a warm-up, four
-  technical drills and a fun finisher, and lands on exactly 30 minutes.
-* The warm-up is always combination work - moves strung together rather than
-  one move repeated - so the first block of the session is real close control.
-  He is a confident dribbler, so the simplest opening is now a pair of moves
-  rather than a single one; the single-move openers have been retired.
-* One day off a week. Recovery is part of the plan, not a failure of it.
-* Instructions are written for Will to read himself.
-
-Re-running is safe: everything keys off a slug and updates in place. Nothing
-here ever deletes a drill - a drill that has left the plan goes in RETIRED and
-is deactivated, because SessionLog.drill is CASCADE and a delete would take
-the sessions he has logged against it too.
+Re-running is safe: everything keys off a slug or a code and updates in place.
+The plan tables (TrainingPlan, PlanDay, PlanDrill) are no longer written; their
+rows stay as they were.
 """
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from training.deck_data import seed_deck
-from training.models import (
-    Badge,
-    Card,
-    Drill,
-    PlanDay,
-    PlanDrill,
-    Skill,
-    TrainingPlan,
-)
+from training.models import Badge, Card, Drill, Skill
 
 DEFAULT_PIN = "1234"
 
@@ -821,139 +799,6 @@ COMBINATIONS = {
     "weak-foot-combo",
 }
 
-# Drills that are no longer in the plan. The tuple stays in DRILLS above, so
-# the drill keeps its text and its page for the sessions he has already logged
-# against it, and a rebuilt database looks identical to an updated one.
-# is_active=False takes it out of his library, out of the plan and out of the
-# offline precache, without deleting a row.
-#
-# This is the mechanism, and it is deliberately an explicit list rather than
-# "deactivate anything not in DRILLS": drills can be added by hand on the
-# coach screens, and a blanket update would switch those off on the next
-# deploy.
-RETIRED = {
-    "figure-eight-legs",   # a single move, and the one he had outgrown
-    "weak-foot-taps",      # replaced by weak-foot-combo
-    # He is a confident dribbler now, and a single move on repeat is no
-    # longer a warm-up for him - it is five minutes of autopilot. All twelve
-    # openings chain moves together instead; the simplest is a pair.
-    "toe-taps",            # single move; the components live on in the chains
-    "sole-rolls",          # single move; the sole roll opens sole-roll-scissor
-    "foundations",         # single move; the same touch is the croqueta jab
-    "rollovers",           # single move; the rollover opens rollover-chop
-    "drag-push-out",       # superseded by drag-back-l-turn, the same L harder
-    "combo-and-burst",     # superseded by croqueta-burst, same finish harder
-}
-
-# PRESEASON SHAPE: six sessions of exactly 30 minutes, and Sunday off. There is
-# no academy and there are no matches over the summer, so Friday and Saturday
-# are no longer bonus days. When the season restarts, put is_optional back on
-# weekdays 4 and 5 and cut them back down.
-#
-# Sunday is a real rest day, not a bonus one. A nine-year-old training seven
-# days out of seven has nowhere to recover, and the streak - which breaks on a
-# missed required day - was pushing him to do it anyway. Rest days are skipped
-# by the streak walk entirely, so taking it costs him nothing. That is 180
-# minutes a week rather than 210.
-#
-# Every drill is five minutes, so a day is simply six of them: a ball-mastery
-# warm-up on the floor, four technical drills, then a fun finisher. Rep-based
-# drills count as five minutes too, so the sum lands on 30 either way and
-# rebalancing a day means swapping a drill, not doing arithmetic.
-#
-# The warm-up slot is always combination work - rollover, fake, chop joined
-# into one flow - because a single move on repeat is autopilot by nine on an
-# elite squad, and the first block is where close control is actually built.
-# All twelve are combinations. Four of them used to be single moves, kept on
-# the argument that the parts of a combination are worth five minutes of their
-# own; he is a confident dribbler now and that argument has run out. The parts
-# survive inside the pairs - the rollover opens rollover-chop, the foundation
-# touch is the croqueta jab - so nothing is actually lost.
-# Twelve slots, twelve different drills: the warm-up is the one thing he meets
-# every single day, so it is the one that goes stale first.
-#
-# Speed sits on three days - Tuesday, Thursday and Saturday. It is the one
-# thing here that tires him rather than teaches him, so it is spaced out and
-# never doubled up in a session. Every day still carries explicit weak-foot
-# work.
-#
-# Every day also carries exactly one juggling block, most of them in the fun
-# finisher slot at the end. Keepy-ups are the one thing he will keep doing for
-# their own sake, and they are pure touch practice - so they are a fixture of
-# the session rather than something he might get round to.
-PLAN_NAME = "Will's Week"
-
-# Each day carries two running orders and alternates between them, so Monday is
-# not the same six drills for six months. The fortnight uses every active
-# drill; on its own, one week could only ever reach 36 of them.
-#
-# Both weeks of a given day keep the same shape - the same label, the same
-# balance, speed on the same three days - so the balance of the fortnight is
-# the balance of either week. Swapping a drill means swapping it for one that
-# keeps that balance. Slot 5 on days 0 and 3 is the deliberate exception, below:
-# the skill there differs between the weeks, which is why the labels name the
-# day's theme rather than listing its skills.
-#
-# Every session carries at least one shooting or dribbling drill. Those are the
-# two things he will do for the fun of it, and a session with neither is a
-# session he has to be talked into. Monday and Thursday carry that rule in
-# slot 5 - because the other four days already had one - and the two weeks take
-# it from opposite ends so neither week doubles a drill up.
-#
-# Each week is 36 slots and 36 *distinct* drills: that is the whole reason the
-# second week exists, and it is what stops a drill landing on back-to-back
-# days. Both rules are asserted in test_seed.py. Two slots are load-bearing for
-# weak foot - day 3 week A's `weak-foot-finish` and week B's
-# `inside-outside-cuts` are the only weak-foot work in their sessions.
-#
-# (weekday, label, target_minutes, is_rest, is_optional,
-#  [week A drills], [week B drills])
-PLAN_DAYS = [
-    (0, "Ball mastery + first touch", 30, False, False, [
-        "double-scissor-push", "wall-control-inside", "weak-foot-control",
-        "cushion-touch", "drag-backs", "keepy-up-record",
-    ], [
-        "step-over-cruyff", "thigh-control", "first-touch-turn",
-        "bouncing-control", "laces-technique", "weak-foot-juggles",
-    ]),
-    (1, "Dribbling + speed", 30, False, False, [
-        "rollover-chop", "cone-slalom", "step-over", "speed-dribble-gate",
-        "cruyff-past-cone", "around-the-world",
-    ], [
-        "step-over-roulette", "cruyff-turn", "drag-backs", "turn-and-sprint",
-        "change-of-pace", "keepy-up-record",
-    ]),
-    (2, "Passing + shooting", 30, False, False, [
-        "rollover-fake-chop", "weak-foot-wall-pass", "wall-pass-one-touch",
-        "laces-technique", "corner-placement", "juggle-and-volley",
-    ], [
-        "drag-back-l-turn", "target-passing", "driven-pass", "weak-foot-finish",
-        "low-driven-shot", "juggling-laces",
-    ]),
-    (3, "First touch + speed", 30, False, False, [
-        "feint-cruyff", "first-touch-turn", "first-touch-and-go",
-        "control-and-move", "weak-foot-finish", "juggling-laces",
-    ], [
-        "sole-roll-scissor", "step-over-past-cone", "sprint-to-the-ball",
-        "juggle-and-catch", "inside-outside-cuts", "freestyle-five",
-    ]),
-    (4, "Dribbling + passing", 30, False, False, [
-        "tap-drag-turn", "inside-outside-cuts", "elastico",
-        "driven-pass", "target-passing", "thigh-juggles",
-    ], [
-        "weak-foot-combo", "scissors", "figure-eight-dribble",
-        "two-touch-wall-pass", "low-juggles", "wall-target-challenge",
-    ]),
-    (5, "Shooting + speed", 30, False, False, [
-        "croqueta-burst", "turn-and-shoot", "low-driven-shot",
-        "alternate-foot-juggles", "drag-back-escape", "beat-the-clock",
-    ], [
-        "croqueta-chop", "corner-placement", "turn-and-shoot", "standing-start",
-        "drag-back-escape", "thigh-juggles",
-    ]),
-    (6, "Rest day", 0, True, False, [], []),
-]
-
 BADGES = [
     ("first-session", "First session", "You did your first drill or card.", "\U0001f31f",
      Badge.TOTAL_DRILLS, 1, 1),
@@ -1007,8 +852,8 @@ BADGES = [
 ]
 
 # Badges switched off but kept: never awarded again, and one he already earned
-# stays on his record tagged Legend. An explicit list, like RETIRED for
-# drills, so a badge added in the admin is not switched off by the next
+# stays on his record tagged Legend. An explicit list, so
+# a badge added in the admin is not switched off by the next
 # deploy. Retired at the switch-over (leg 3c of docs/chart/deck.md): the day
 # streaks, which weeks in a row replaces, and the two that measured the fixed
 # plan - minutes and every drill of every day.
@@ -1018,45 +863,14 @@ RETIRED_BADGES = [
 
 
 class Command(BaseCommand):
-    help = "Create the starter drills, weekly plan, badges and profiles."
-
-    def add_arguments(self, parser):
-        parser.add_argument(
-            "--reset",
-            action="store_true",
-            help="Delete existing drills and plans first, instead of updating them.",
-        )
+    help = "Create the skills, drills (inactive), badges, deck and profile."
 
     @transaction.atomic
     def handle(self, *args, **options):
-        if options["reset"] and not settings.DEBUG:
-            # --reset deletes every Drill, and SessionLog.drill is CASCADE, so
-            # it deletes every session Will has ever logged, his streak and the
-            # counts behind his badges. None of it can be typed back in. It is
-            # a development convenience and it has no business anywhere near
-            # the disk on Render, which is the only copy of his history.
-            raise CommandError(
-                "--reset deletes every drill, and SessionLog.drill is CASCADE, "
-                "so it would delete Will's entire training history. Refusing "
-                "on a non-DEBUG database. Retire a drill instead: add its slug "
-                "to RETIRED in this file."
-            )
-
-        if options["reset"]:
-            PlanDrill.objects.all().delete()
-            PlanDay.objects.all().delete()
-            TrainingPlan.objects.all().delete()
-            Drill.objects.all().delete()
-            Skill.objects.all().delete()
-            self.stdout.write("Cleared existing drills and plans.")
-
         skills = self._seed_skills()
         self._seed_drills(skills)
         self._seed_badges()
-        self._seed_plan()
         self._seed_profiles()
-        # The challenge cards. Never touched by --reset: Play.card is PROTECT
-        # and the deck has no plan to rebuild, so there is nothing to clear.
         seed_deck()
 
         self.stdout.write(
@@ -1064,7 +878,6 @@ class Command(BaseCommand):
                 f"Ready: {Skill.objects.count()} skills, "
                 f"{Drill.objects.count()} drills, "
                 f"{Badge.objects.count()} badges, "
-                f"plan '{PLAN_NAME}' with {PlanDay.objects.count()} days, "
                 f"{Card.objects.active().count()} cards in the deck."
             )
         )
@@ -1107,10 +920,10 @@ class Command(BaseCommand):
                     "is_fun": is_fun,
                     "is_juggling": slug in JUGGLING,
                     "is_combination": slug in COMBINATIONS,
-                    # Retiring a drill never deletes it: SessionLog.drill is
-                    # CASCADE, so a delete would take his logged history with
-                    # it. The row stays and goes quiet.
-                    "is_active": slug not in RETIRED,
+                    # Every drill retired with the plan (leg 3d), never
+                    # deleted: SessionLog.drill is CASCADE, so a delete would
+                    # take his logged history with it.
+                    "is_active": False,
                 },
             )
 
@@ -1128,35 +941,6 @@ class Command(BaseCommand):
                     "is_active": code not in RETIRED_BADGES,
                 },
             )
-
-    def _seed_plan(self):
-        plan, _ = TrainingPlan.objects.update_or_create(
-            name=PLAN_NAME, defaults={"is_active": True}
-        )
-        for (
-            weekday, label, minutes, is_rest, is_optional, week_a, week_b
-        ) in PLAN_DAYS:
-            day, _ = PlanDay.objects.update_or_create(
-                plan=plan,
-                weekday=weekday,
-                defaults={
-                    "label": label,
-                    "target_minutes": minutes,
-                    "is_rest": is_rest,
-                    "is_optional": is_optional,
-                },
-            )
-            # Rebuild the running order from scratch so re-seeding cannot
-            # leave stale or duplicated entries behind.
-            day.items.all().delete()
-            for week, slugs in ((PlanDrill.WEEK_A, week_a), (PlanDrill.WEEK_B, week_b)):
-                for order, slug in enumerate(slugs, start=1):
-                    PlanDrill.objects.create(
-                        plan_day=day,
-                        drill=Drill.objects.get(slug=slug),
-                        order=order,
-                        week=week,
-                    )
 
     def _seed_profiles(self):
         """Create Will's profile if it is missing.

@@ -4,13 +4,18 @@ Guidance for Claude Code when working in this repository.
 
 ## What this is
 
-A daily football training app for **Will, aged 9**, who plays for an academy
-elite squad. He opens it on his phone, sees the day's session, ticks off drills
-as he does them, and watches his streak and badges build. Phil (his dad) is the
-only maintainer and the only other user.
+A football training app for **Will, aged 9**, who plays for an academy elite
+squad. He opens it on his phone to a hand of scored challenge cards, plays any
+three, and chases medals, levels and his own bests, weak foot first. Phil (his
+dad) is the only maintainer and the only other user.
 
 The whole point is that it can be **handed over**: Will uses it without help.
 That constraint decides most arguments about design and scope.
+
+It began as a fixed six-drill daily plan. That was replaced by the cards in
+legs 1-3 of `docs/chart/deck.md` and retired in leg 3d; what he did on it is
+kept, read-only, as **Before the cards**. Read the chart and `CONTEXT.md`
+before changing anything about the game.
 
 ## Commands
 
@@ -21,13 +26,10 @@ Store stub and will fail with a launch error.
 uv sync                          # install
 uv run manage.py runserver       # http://127.0.0.1:8000
 uv run manage.py migrate
-uv run manage.py seed_drills     # drills, plan, badges, Will's profile
-uv run manage.py seed_drills --reset   # rebuild from scratch; DEBUG only, see below
+uv run manage.py seed_drills     # skills, drills (inactive), badges, cards, Will's profile
 uv run manage.py set_pin will 4321
-uv run manage.py make_icons        # redraw the PWA icons (only if the icon changes)
-uv run manage.py clear_trial_plays --through 2026-10-10   # dry run; Phil's deck trial plays, goes in 3d
-uv run pytest                    # ~10 min (3 Today tests fail on Sundays)
-uv run pytest training/tests/test_seed.py -q    # just the coaching rules
+uv run manage.py make_icons      # redraw the PWA icons (only if the icon changes)
+uv run pytest                    # a few minutes
 ```
 
 `uv` lives at `C:\Users\philc\AppData\Local\Programs\Python\Python313\Scripts`
@@ -35,249 +37,81 @@ and may not be on PATH; add it to `$env:Path` first in a fresh shell.
 
 ## Architecture
 
-Django 5.2 + SQLite. One app, `training`. Server-rendered templates and a little
-vanilla JS. **No SPA framework and no build step** — this is deliberate, do not
-introduce one.
+Django 5.2 + SQLite. One app, `training`. One page that draws itself on the
+phone, a few server-rendered pages, and vanilla JS. **No SPA framework and no
+build step** — this is deliberate, do not introduce one.
 
 ```
-config/settings.py    dev defaults; every production knob is an env var
-training/models.py    Skill, Drill, TrainingPlan, PlanDay, PlanDrill,
-                      SessionLog, SessionClock, Badge, EarnedBadge
-training/progress.py  streaks, stats, badge awarding — pure functions
-training/throttle.py  login rate limiting, cache-backed
-training/views.py     every screen, function-based
-training/management/commands/seed_drills.py   the drills and the weekly plan
+config/settings.py         dev defaults; every production knob is an env var
+training/models.py         Card, Play (the deck); Badge, EarnedBadge; Skill, Drill,
+                           SessionLog, SessionClock (his history); the retired
+                           TrainingPlan, PlanDay, PlanDrill (rows kept, unread)
+training/deck_data.py      the 51 cards and seed_deck(); called by seed_drills
+training/deck_rules.py     every game number, history rules, deck badges
+training/deck_views.py     / (the deck shell) and /api/plays/ (the backup)
+training/views.py          login, Before the cards, the coach screen, PWA plumbing
+training/progress.py       his history from before the cards; the award step
+training/throttle.py       login rate limiting, cache-backed
+static/training/js/deck.js everything he sees and does on /, Progress included
+static/training/js/app.js  service worker registration, connection banner
 ```
 
 Function-based views on purpose: one maintainer, re-read in a year.
 
-### Things that will bite you
-
-- **`Drill` is minutes XOR reps**, enforced by a `CheckConstraint` and by
-  `clean()`. Creating one with both or neither raises `IntegrityError`.
-- **The session is timed, never the drill.** One clock on Today counts *up*
-  for the whole session (`static/training/js/session.js`, state in
-  `localStorage` so it survives navigating into a drill and back). Per-drill
-  countdowns were removed on purpose: a clock running down on the drill he was
-  enjoying is what made him stop. Do not put one back.
-- **Adopting the server's banked seconds must rebase `startedAt`.** `read()` in
-  `session.js` takes the server's figure when it beats the phone's, for a
-  cleared `localStorage` or a tick from another device. Two rules, and getting
-  either wrong double-counts the session: compare the banked value against
-  `accumulated + running(state)`, never against `accumulated` alone, which is
-  stale by the whole running portion while the clock runs; and when adopting,
-  set `startedAt = Date.now()`, because the banked figure *already contains*
-  the time since the start. This was broken from the day the clock landed - a
-  tick banks the elapsed time and reloads Today, so every tick added the whole
-  session again and a real 30 minutes banked as 105. `TestSessionClockScript`
-  in `test_views.py` guards it by reading the source, because the bug happens
-  in the browser before the POST and no server-side test can see it.
-- **A by-hand figure is the only thing that may lower the clock.**
-  `record_session_seconds(..., exact=True)`, reached by posting `minutes`
-  rather than `seconds` to `session_time`. Everything else takes the larger
-  value so a tick queued offline cannot rewind a session that has run on. The
-  entry point is a minus/plus stepper in fives on Today - no typing on his
-  screens - and `session.js` writes the number into `localStorage` before the
-  form posts, or the stale local value puts the old number straight back.
-- **`SessionClock` is the source of truth for minutes, when it exists.**
-  `progress._minutes_per_log()` is the only place that knows the rule: a day he
-  clocked is worth what the clock says, shared across the drills he ticked; a
-  day he did not is worth the sum of the drills' planned lengths, which is what
-  every day before the clock existed still computes. Never make the clock
-  authoritative for days without one - that would silently rewrite his history.
-  Clock seconds only ever move up, and a day with no ticks is worth nothing.
-- **A day holds two sessions and alternates between them.** `PlanDrill.week`
-  is `WEEK_A`, `WEEK_B` or `EVERY_WEEK`, and `progress.week_of(date)` says
-  which half of the fortnight a date is in - Monday-aligned and continuous, so
-  a Mon-Sun week is never split and a 53-week year never repeats a session.
-  Anything reading a day's drills must go through `session_for()` or
-  `PlanDay.drills_for_week()`; `day.items` is both weeks at once and is only
-  right on the coach screens, which show one week at a time via `?week=`.
-- **`test_seed.py` asserts every rule against all twelve sessions**, not six -
-  see the `sessions()` helper. A rule checked against `day.items` would be
-  checking both weeks jammed together and would miss a week B that had drifted.
-- **The fortnight uses every active drill**, and a test says so. That is the
-  whole reason the second week exists: one week can only reach 36 of them.
-  Currently 58 active of 66 rows - a drill added to the library must be given a
-  slot in the plan, or retired.
-- **Two things that can delete his history are held shut, deliberately.**
-  `seed_drills --reset` raises `CommandError` unless `DEBUG` is on, and
-  `SkillAdmin`/`DrillAdmin` refuse delete permission via `NoDeleteMixin`. Both
-  guard the same cascade: `Drill.skill` and `SessionLog.drill` are `CASCADE`, so
-  removing one skill in the admin, or one careless `--reset` in a Render shell,
-  takes every session he has ever logged. `test_seed.py` and `test_admin.py`
-  both fail if either guard is removed. Note `--reset` on SQLite is also how
-  `migrate` rebuilds a table: an `AddField` emits `CREATE new / INSERT SELECT /
-  DROP TABLE / RENAME`, which is safe only because Django wraps it in
-  `PRAGMA foreign_keys = OFF`. Back the disk up before migrating anyway.
-- **A deploy rebuilds the plan and discards coach edits.** `_seed_plan` does
-  `day.items.all().delete()` and rebuilds from `PLAN_DAYS` on every run, and
-  `seed_drills` runs on every Render start. Changing a day's running order on
-  Coach -> the plan screen is for trying something out; to keep it, put it in
-  `seed_drills.py`. The screen says so.
-- **Every session carries exactly one juggling block**, flagged by
-  `Drill.is_juggling` and asserted in `test_seed.py`. Keepy-ups are the thing
-  he will do for the fun of it and they are pure touch work.
-- **`SessionLog` is unique on `(athlete, date, drill)`.** This is what makes
-  completion idempotent, which is what lets a tick queued offline be replayed
-  safely. Do not relax it without replacing the offline queue.
-- **Ticks happen from the Today list, not just the drill page.** Each undone
-  row is a form posting to `drill_complete`; the drill page is for reading the
-  instructions. Every one of those forms carries `session_seconds`, so the
-  clock is banked even if he never taps Finish. Done rows show a plain tick and
-  no button - unticking is on the drill page, where it cannot happen by
-  accident in his pocket.
-- **Rest days and optional days never break a streak.** `progress.day_state()`
-  returns `rest` for them and the streak walk skips over them. Today not being
-  done yet also does not break the streak. Preseason there are no optional days
-  in the seeded plan, but the machinery stays — it is how Fri/Sat go back to
-  bonus days when the season restarts.
-- **A tick must never wipe a count.** `drill_complete` writes only the fields
-  the request actually carried: the tick on the Today list posts no count and
-  no rating, and it would otherwise blank the 30 he counted on the drill page
-  ten minutes earlier - which is what his record is made of. A rep drill still
-  gets its `actual_minutes` cleared and vice versa; that part is deliberate.
-- **Counts are editable on Coach -> His sessions.** `coach_log_edit` changes
-  the number or blanks it, and never deletes the row: saying he did not do the
-  drill would move his streak and his badges. Per-drill *minutes* are not
-  editable - nothing writes them any more, and old rows still feed his
-  lifetime minutes through the `_minutes_per_log` fallback.
-- **His own score is the thing to beat.** `progress.personal_best()` reads the
-  best `actual_reps` for a drill; `drill_complete` reads it *before* the tick
-  overwrites today's row, and counts anything already logged today, or ticking
-  the same number twice claims a second record. Rep targets are what the drill
-  ships with; the record is what he actually did, and it wins.
-- **A streak and a perfect week are different bars.** One drill keeps a streak
-  alive; the `perfect-week` badge needs every drill of every required day for a
-  whole Mon-Sun week. Both read the plan as it stands *today*, not as it stood
-  back then - there is no plan history and rebuilding one is not worth it.
-- **Streak functions take the date explicitly.** Never call `date.today()`
-  inside `progress.py` — the tests pin dates.
-- **One profile only.** `get_athlete()` returns the single non-staff user. The
-  coach screens sit behind the same code and are kept off Will's tab bar, not
-  behind a second account.
-- **`{# #}` template comments are single-line.** Spread one over two lines and
-  it is no longer a comment — the text renders onto the page, and the response
-  is still a 200 so nothing looks wrong. `TestTemplateComments` guards this.
-- **A drill is retired, never deleted and never rewritten.** `SessionLog.drill`
-  is `CASCADE`, so deleting a drill takes every session he logged against it
-  with it - which is what `seed_drills --reset` does, and why that flag must
-  never reach Render. Rewriting a slug's content in place loses no rows but is
-  worse in its own way: his June logs would silently start claiming he did a
-  three-move combination. So the tuple stays in `DRILLS`, the slug goes in
-  `RETIRED`, and `is_active=False` takes it out of his library, the plan and
-  the precache while leaving the row - and his history - alone. `RETIRED` is an
-  explicit list on purpose: drills can be added by hand on the coach screens,
-  and "deactivate anything not in `DRILLS`" would switch those off on the next
-  deploy. `progress.best_scores()` reads retired drills too (leg 3c), so a
-  retired rep drill keeps his record on Before the cards.
-- **Test fixtures use `test-` prefixed slugs** so they compose with the
-  `seeded` fixture, which creates the real drills.
-
-## The deck (the app since leg 3c of `docs/chart/deck.md`)
-
-The deck of scored challenge cards replaced the fixed plan at the switch-over;
-read the chart and `CONTEXT.md` before touching it. His tab bar is **Cards**
-and **Progress**, both drawn by `deck.js` on the one page at `/`.
-
-```
-training/deck_data.py    the 51 cards and seed_deck(); called by seed_drills
-training/deck_views.py   / (the shell) and /api/plays/ (the backup)
-static/training/js/deck.js   everything he sees and does on /, Progress included
-```
+## The deck
 
 - **`/` is the deck and must render, never redirect.** The icon opens `/`,
   and the service worker refuses to keep a redirected page, so a redirect
-  leaves the icon blank offline. `/deck/` and `/progress/` redirect *to* it
-  for old links. Progress is `/#progress` (`#badges` is an alias), drawn on
-  the phone so it adds up the same plays as the hand; `route()` lights the
-  tab. The old fixed plan lives at `/today/`, off his tab bar, reached from
-  Coach as "Old Today screen (until 3d)"; the tick URLs never moved, because
-  ticks queued on his phone replay to the address they stored. `app.js`
-  sends an offline tick back to `/today/`, not `/`.
-- **Before the cards** (`/before/`) is the old Progress, read-only: best
-  streak, totals, minutes per skill, records. No live streak, no badges, and
-  no link to a drill page - those carry the tick and untick forms.
-- **The deck is drawn on the phone.** `/` is a shell with every active
-  card baked in; `deck.js` deals, scores, and keeps every play in
-  localStorage (`will-deck-plays-v1`) before sending it to `/api/plays/`. A
-  play's id is made on the phone, so a resend changes nothing. No server
-  answer removes a play from the phone, and `savePlays` refuses a list that is
-  shorter or missing an id. The CSRF token is read from the `csrftoken`
-  cookie at send time, because a cached page's token goes stale at the next
-  sign-in. The service worker never touches `/api/`. The date is the phone's
-  local date, never UTC - `toISOString().slice(0, 10)` puts a play at 00:30 in
-  summer on yesterday.
-- **A card is retired, never deleted, and its meaning never changes.**
-  `Play.card` is `PROTECT`. New wording or medal targets are fine in place. A
-  change to `scoring`, `per_foot`, `timer_seconds` or `out_of` changes what
-  the plays against it mean, so it is a new slug with the old one put in
-  `RETIRED`. `api_plays` accepts plays on retired cards: the phone has no
-  other copy to send.
-- **A play is stamped once, on the phone, when he saves it** (leg 2a):
-  `points`, `medal`, `bests` on `Play`, never worked out again. Totals, his
-  level and which move levels are open are sums and maxes of stamps, so a
-  change to points or medal targets never takes back what he earned. Null is
-  an unstamped play - from before 2a or an old cached page - and is worth
-  nothing. A bad stamp is dropped, never a reason to refuse the play: a real
-  score must not be lost over what it was worth. `restore()` fills a missing
-  stamp from the server, nulls only.
+  leaves the icon blank offline. `/deck/`, `/progress/`, `/today/` and
+  `/library/` redirect *to* it for old links, and `/coach/logs/` to `/coach/`. His tab bar is **Cards** and
+  **Progress**; Progress is `/#progress` (`#badges` is an alias), drawn on the
+  phone so it adds up the same plays as the hand, and `route()` lights the
+  tab and sets the top-bar title.
+- **The deck is drawn on the phone.** `/` is a shell with every active card
+  baked in; `deck.js` deals, scores, and keeps every play in localStorage
+  (`will-deck-plays-v1`) before sending it to `/api/plays/`. A play's id is
+  made on the phone, so a resend changes nothing. No server answer removes a
+  play from the phone, and `savePlays` refuses a list that is shorter or
+  missing an id. The CSRF token is read from the `csrftoken` cookie at send
+  time, because a cached page's token goes stale at the next sign-in. The
+  service worker never touches `/api/`. The date is the phone's local date,
+  never UTC - `toISOString().slice(0, 10)` puts a play at 00:30 in summer on
+  yesterday.
+- **Nothing deletes a play.** `Play.card` and `Play.athlete` are `PROTECT`,
+  the admin refuses delete and add, and there is no command for it. The
+  trial clear-out was deleted in 3d, never run: Render held 0 plays on
+  4 Oct 2026, so no trial play ever reached his record. Every play on his
+  account is his: never test by saving one on Render.
+- **A card is retired, never deleted, and its meaning never changes.** New
+  wording or medal targets are fine in place. A change to `scoring`,
+  `per_foot`, `timer_seconds` or `out_of` changes what the plays against it
+  mean, so it is a new slug with the old one put in `RETIRED` in
+  `deck_data.py`. `api_plays` accepts plays on retired cards: the phone has
+  no other copy to send.
+- **A card's slug, move and level never change.** Unlocks look up the gate
+  card by move and level and read its stamped medals by slug, so moving
+  either re-locks a level he opened. `FROZEN_MEANINGS` in `test_deck.py`
+  holds them.
+- **A play is stamped once, on the phone, when he saves it**: `points`,
+  `medal`, `bests` on `Play`, never worked out again. Totals, his level and
+  which move levels are open are sums and maxes of stamps, so a change to
+  points or medal targets never takes back what he earned. Null is an
+  unstamped play and is worth nothing. A bad stamp is dropped, never a reason
+  to refuse the play: a real score must not be lost over what it was worth.
+  `restore()` fills a missing stamp from the server, nulls only.
 - **Every game number lives in `deck_rules.py`** and reaches the phone as the
   `deck-rules` block; `deck.js` keeps none of its own beyond the game's shape
   (three medals, three levels per move). **Level thresholds may go down,
   never up** - raising one takes a level off him, and `test_deck_rules.py`
   holds the ceilings. The skill of the week starts on `BLOCKS_START` and is
   None before it, so nothing is stamped double early.
-- **A card's slug, move and level never change** - only retired, like drills.
-  Unlocks look up the gate card by move and level and read its stamped
-  medals by slug, so moving either re-locks a level he opened.
-  `FROZEN_MEANINGS` in `test_deck.py` holds them.
 - **Gold on a move level opens the next.** A locked card is never dealt and
   cannot be played; it shows "Locked" and what opens it. The Moves card in his
   hand is always the skill of the week at its highest open level.
-- **The deck's badges are awarded at sync, on the server, from his plays**
-  (leg 2b): `deck_rules.deck_badge_values` over every Play row, retired cards
-  included, and `award_deck_badges` when a POST saves a new play. They never
-  go through `progress.award_badges` - `Badge.DECK_KINDS` keeps a tick from
-  awarding one. Gold medal and
-  Record breaker trust the phone's stamps; `_parse_stamp` holds the checks
-  that stay true whatever the targets become. Already earned stays earned.
-- **The kept old badges count ticks and card plays together** (leg 3b):
-  First session, 10/50/100 drills, All rounder, Two footed, Keepy-up king -
-  `Badge.KEPT_KINDS`. `progress.kept_badge_values` is the one place that adds
-  them up, and both a tick on Today (`award_badges`) and a deck sync
-  (`award_deck_badges`) award from it, each award in its own savepoint so a
-  race between the two never rolls back a tick - `progress.award` is the one
-  award step for both. One go on a card is a
-  *card-day* (`deck_rules.kept_counts_from_plays`): a different card on a day, free play
-  included, never the score. All rounder is the larger of skills tried and
-  packs played, never the sum. The Progress tab shows every deck and kept
-  badge plus anything else he earned, retired ones tagged Legend.
 - **A deck session is 3 different cards on one day, free play included; a
   goal week is 3 sessions Mon-Sun.** This is the one rule written twice -
   `deck_rules.session_dates` and `weekStatus` in `deck.js`. Change both. The
   current week never breaks a run; weeks in a row is shown only from 1.
-- **A badge is retired, never deleted.** `EarnedBadge.badge` is CASCADE, so
-  both badge admins refuse delete. `RETIRED_BADGES` in `seed_drills.py` is an
-  explicit list - since 3c the day streaks, Perfect week and 500 minutes; a
-  retired badge is never awarded again, and one he earned shows tagged
-  Legend. `clear_trial_plays` is the only thing that removes an award: it
-  deletes every active deck badge (Legends are kept) and re-awards from the
-  plays left. Its delete stays bounded by `DECK_KINDS` - **never widen it to
-  the kept badges**: they were earned from real ticks, a re-award rewrites
-  every date, and one whose count fell since would not come back.
-- **His old app gives him a head start** (leg 3a), worked out from his
-  SessionLog rows on every deck load by `deck_rules.history_for` and written
-  nowhere: 5 points per drill he ticked, capped at 1000 (`starting_points`),
-  and his old best on the three drills that are the same exercise as a card
-  (`HISTORY_CARDS`, `starting_bests`). Per user - `request.user`, never
-  `get_athlete()`. Once he has seen it, the per-tick figure and the cap may
-  go up, never down. No medals come from old scores: no old move drill was
-  ever scored, so no level opens from history. Because it is live, unticking
-  on Today or editing a count on His sessions moves it; stamps never change.
-- **`will-deck-server-v1`** caches what only the server knows - every badge
-  he has earned (only ever added), the goal-week run to last week, and badges not
-  yet celebrated. It is not the plays list, and nothing in it is a record.
 - **The hand** is five cards from five packs: always one Moves card and one
   Quick feet or Combos card. It is the same all day until he deals again.
   Free play is a button, not a card in the hand.
@@ -285,186 +119,172 @@ static/training/js/deck.js   everything he sees and does on /, Progress included
   he did not reach on his record for good.
 - **The phone resends what the server has lost.** `restore()` marks unsent
   any play the server's list no longer holds - a disk restored from backup,
-  say - so `sync()` sends it again instead of the status line claiming
-  "backed up". The flip side: deleting plays on the server does nothing on
-  its own while a phone still holds them.
+  say - so `sync()` sends it again. The flip side: deleting plays on the
+  server does nothing on its own while a phone still holds them.
 - **A weak-foot score is on the phone before the strong foot starts**
   (`will-deck-draft-v1`), so a page thrown away mid-card resumes rather than
   losing the go he just counted.
-- **`clear_trial_plays` is the only thing that deletes a play**, and exists
-  only so Phil's trial plays come off Will's record before the hand-over. It
-  needs `--through DATE`, and `--confirm` needs `--expect N` matching the dry
-  run. Kept through the switch-over as a margin (3c); it is deleted in 3d.
-  Back the disk up first, and clear the site data on every phone the deck
-  was tried on, or the phone sends them back. Since 3c every play on his
-  account is his: never test by saving one there.
+- **`will-deck-server-v1`** caches what only the server knows - every badge
+  he has earned (only ever added), the goal-week run to last week, and badges
+  not yet celebrated. It is not the plays list, and nothing in it is a record.
 - **Scores are read-only in the admin.** The phone's copy wins on the phone,
   so an admin correction would leave his bests showing the old number.
 
-## The seed data is the product
+## Badges
 
-`seed_drills.py` is the most important file. It holds 66 drills and the weekly
-plan, and the coaching brief is encoded as **assertions in
-`training/tests/test_seed.py`**. Those tests fail if someone:
+- **Every badge is awarded at sync, on the server.** `award_deck_badges`
+  runs when a POST to `/api/plays/` saves plays, and awards through
+  `progress.award` - the one award step, each award in its own savepoint, so
+  two syncs racing to one badge leave one row and no error. A badge going
+  wrong is logged, never a 500: it must not cost a play.
+- **Deck badges** (`Badge.DECK_KINDS`) come from his plays,
+  `deck_rules.deck_badge_values` over every Play row, retired cards included.
+  Gold medal and Record breaker trust the phone's stamps; `_parse_stamp`
+  holds the checks that stay true whatever the targets become.
+- **Kept badges** (`Badge.KEPT_KINDS`: First session, 10/50/100 drills, All
+  rounder, Two footed, Keepy-up king) count his old ticks and card plays
+  together. `progress.kept_badge_values` is the one place that adds them up.
+  One go on a card is a *card-day* (`deck_rules.kept_counts_from_plays`): a
+  different card on a day, free play included, never the score. All rounder
+  is the larger of skills tried and packs played, never the sum.
+- **A badge is retired, never deleted.** `EarnedBadge.badge` is CASCADE, so
+  both badge admins refuse delete. `RETIRED_BADGES` in `seed_drills.py` is an
+  explicit list (the day streaks, Perfect week, 500 minutes); a retired badge
+  is never awarded again, and one he earned shows tagged Legend. Already
+  earned stays earned: nothing removes an award.
 
-- adds a drill needing a partner, a goalkeeper or a teammate;
-- adds strength work, weights, plyometrics or endurance running;
-- writes a drill longer than five minutes;
-- lets a session drift off six drills, or off the flat 30 minutes a day the
-  preseason plan is balanced to;
-- drops the weak-foot work or the fun finisher from a day;
-- puts speed on more or fewer than three days, doubles it up in one session, or
-  lets it take the warm-up slot;
-- breaks the warm-up-first shape, or the 36–80 drill count (rows, including
-  retired ones - the bound counts rows, retirement never deletes one, so it
-  ratchets up and raising it after a batch retires is expected);
-- lets a single move on repeat back into the warm-up slot, grades a warm-up
-  easy, or repeats a warm-up inside a fortnight.
+## His history, before the cards
 
-When editing drills, keep the principles:
+Nothing writes to it any more. Everything here is about keeping it exactly as
+it is and reading it the same way every time.
 
-- **Ball mastery and first touch are the priority.** Technique over fitness.
-- **Speed work is football speed, not athletics.** Mostly with the ball — a
-  first touch and a burst after it, a dribble at full pelt — with a couple of
-  plain short sprints. Every one says when to stop and get his breath back.
-  `TestSpeedWork` enforces the ball-majority, the length and the recovery.
-- Every drill doable **alone** in a garden with a ball, a wall and a few cones.
-- **Both feet explicitly**, with weak-foot work in every session.
-- Instructions are **two or three short sentences written for Will to read
-  himself** — second person, present tense, no jargon. Not notes for Phil to
-  interpret.
-- One coaching cue each ("head up", "laces, not toes").
+- **SessionLog, SessionClock and the drills are his record from the fixed
+  plan.** Nothing adds or removes a SessionLog: the tick endpoints went in
+  3d, and `SessionLogAdmin` refuses add and delete with the date, drill and
+  athlete read-only. Each row is worth 5 head-start points and a step toward
+  a kept badge, so a row added or removed moves both.
+- **Never delete a drill or a skill.** `Drill.skill` and `SessionLog.drill`
+  are `CASCADE`: removing one skill takes every drill under it and every
+  session he logged against them. `SkillAdmin`/`DrillAdmin` refuse delete via
+  `NoDeleteMixin`, and `seed_drills` has no `--reset` any more. Never rewrite
+  a drill's text either - his June logs would start claiming he did
+  something else. Every drill is seeded with `is_active=False` and kept.
+  `JUGGLING` and `COMBINATIONS` stay in `seed_drills.py`: Keepy-up king counts
+  `is_juggling` ticks.
+- **His head start** is worked out from his SessionLog rows on every deck
+  load by `deck_rules.history_for`, and written nowhere: 5 points per drill
+  he ticked, capped at 1000, and his old best on the three drills that are
+  the same exercise as a card (`HISTORY_CARDS`). Per user - `request.user`,
+  never `get_athlete()`. The per-tick figure and the cap may go up, never
+  down. No medals come from old scores.
+- **Counts are editable on the Coach screen** (`/coach/`). `coach_log_edit` changes
+  the number or blanks it, and never deletes the row. A value that is not a
+  count changes nothing - never wipes one. A count moves only his
+  records on Before the cards and the three "from before" keepy-up bests -
+  never points or badges, which count rows, not reps.
+- **His best streak is frozen to the plan's last rule**: Monday to Saturday
+  required, Sunday rest (`progress.REST_WEEKDAYS`). It used to read the
+  active plan, and with no plan every missed day would read as rest - his
+  best streak would quietly join every day he ever trained into one run.
+- **`SessionClock` decides what a clocked day was worth.**
+  `progress._minutes_per_log()` is the only place that knows the rule: a day
+  he clocked is worth what the clock says, shared across the drills he
+  ticked; a day he did not is worth the sum of the drills' planned lengths.
+  Never make the clock authoritative for days without one.
+- **`progress.best_scores()` reads every rep drill**, inactive ones included,
+  so every record stays on Before the cards.
+- **The plan tables are retired, not dropped.** `TrainingPlan`, `PlanDay` and
+  `PlanDrill` rows stay as they were; nothing reads or writes them, and their
+  admins are gone. Dropping them is a later leg with its own backup.
+- **His phone may still hold `will-training-queue`, `-pending` and `-clock`**
+  from the old app. `app.js` leaves them alone on purpose: never read, never
+  removed.
 
-### The weekly plan
+## Moves are named once
 
-**Currently preseason: six sessions of exactly 30 minutes, Sunday off.** No
-academy and no matches over the summer, so Friday and Saturday are ordinary
-training days. 180 minutes a week. Sunday is a real rest day, added
-deliberately: seven days out of seven left him nowhere to recover, and the
-streak - which breaks on a missed required day - was pushing him to train
-anyway. Do not quietly put the seventh session back, and do not cut the other
-six either.
-
-**Every drill is five minutes, so a day is six of them:** a ball-mastery
-warm-up, four technical drills, a fun finisher - and one of those six is
-always juggling. **All twelve warm-ups are combination work** - a sequence of
-moves joined into one flow, step over into Cruyff, body feint into Cruyff -
-because a single move on repeat is autopilot by nine on an elite squad, and
-the first block is where close control is actually built. Four openers used to
-stay single moves, on the argument that the parts of a combination are worth
-five minutes of their own; he is a confident dribbler now and that argument
-ran out, so `toe-taps`, `sole-rolls`, `foundations` and `rollovers` are
-retired and the parts survive inside the pairs. Twelve sessions, twelve
-different openings: the warm-up is the one slot he meets every single day, so
-it is the one that goes stale first. `Drill.is_combination` flags it, fed by
-the `COMBINATIONS` slug set. `test_seed.py` asserts all twelve chain moves and
-that none is graded easy - `is_combination` says the moves are joined up, not
-that they are hard, so the difficulty bar is a separate assertion.
-
-A move is described the same way wherever it appears - a chop is always cut
-back with the inside of the foot, a step over is always stepped with one foot
-and pushed away with the outside of the other, matching the `step-over` drill
-in Dribbling - and every move a combination names is described in that drill,
-because he is alone in a garden and cannot look one up. Two pairs that look
-alike are told apart out loud, and this is the part a future change will get
-wrong. **There is one chop and it is the existing one**: cut back with the
-inside of the foot, in front of him. A "Ronaldo chop" is deliberately *not*
-added under that name - the behind-the-standing-leg inside cut is already in
-the library as the Cruyff turn, and two moves under one word is exactly what
-this rule exists to stop. The Cruyff and the L-turn (`drag-back-l-turn`) both
-cut behind the standing leg with the inside of the foot; the Cruyff spins him
-away, the L-turn brings him out facing square. Because the touch is the same,
-the L-turn drill says "do not spin all the way round" out loud **and** the two
-are kept in different sessions - they were in the same one, one slot apart,
-and it read as two contradictory instructions for the same move. A **scissor**
+A move is described the same way on every card - a chop is always cut back
+with the inside of the foot, a step over is always stepped with one foot and
+pushed away with the outside of the other - because he is alone in a garden
+and cannot look one up. **There is one chop**: cut back with the inside of the
+foot, in front of him; the deck calls it *Chop turn* (an "inside hook" is the
+same move). The behind-the-standing-leg inside cut is the **Cruyff turn**, and
+two moves under one word is exactly what this rule stops. A **scissor**
 circles the ball and pushes away with the *same* foot, a **step over** pushes
-away with the *other* one, and the `scissors` drill says so in as many words.
+away with the *other* one. Keep them apart in any wording.
 
-One more trap, learned the hard way: `is_combination` is a hand-kept set, so a
-single move dropped into a warm-up slot passes every test while claiming to be
-a chain. `double-scissor-push` is two circles and an exit precisely because one
-circle and an exit is already the `scissors` drill. Count the touches before
-adding a warm-up.
+## Things that will bite you
 
-Every day has two such sessions, week A and week B, with the
-same shape and the same skills so the balance holds whichever week it is. Five minutes is now a planning figure rather than something he
-is held to: the session clock is what he actually runs against. Rep-based drills count as five
-minutes too (`Drill.estimated_minutes`), so the sum is 30 whatever mix a day is
-built from and rebalancing means swapping a drill, not doing arithmetic. That
-is the whole reason for the five-minute cap — keep it.
+- **One profile only.** `get_athlete()` returns the single non-staff user.
+  The coach screen sits behind the same code and is kept off Will's tab bar,
+  not behind a second account. Staff get a 403 from `/api/plays/`: the phone
+  keeps one list of plays whoever is signed in. Don't sign into `/admin/` on
+  his phone.
+- **`{# #}` template comments are single-line.** Spread one over two lines
+  and it is no longer a comment — the text renders onto the page, and the
+  response is still a 200 so nothing looks wrong. `TestTemplateComments`
+  guards this.
+- **Functions that read history take the date explicitly.** Never call
+  `date.today()` inside `progress.py` or `deck_rules.py` — the tests pin dates.
+- **Test fixtures use `test-` prefixed slugs** so they compose with the
+  `seeded` and `deck` fixtures, which create the real drills and cards.
 
-**Speed is on weekdays 1, 3 and 5 only, one block per session.** Sprinting is
-the one thing here that tires him rather than teaches him. It never goes in the
-warm-up slot either: cold sprinting is how something gets pulled.
+## The cards are the product
 
-**Every session carries at least one shooting or dribbling drill.** They are
-the two things he loves and will do for the fun of it, and a session with
-neither is a session he has to be talked into. Four days already had one;
-Monday and Thursday carry the rule deliberately in slot 5, dribbling in week A
-and shooting in week B. Swapping that slot out means swapping another of the
-two in. Both skills must stay on at least five of the twelve sessions, so the
-rule cannot be satisfied by turning the whole fortnight into shooting -
-`test_seed.py` asserts the rule and the balance. One of each *per session* was
-considered and rejected: it claims 24 of the 72 slots for 11 distinct drills,
-which strands a drill and breaks the fortnight-uses-every-active-drill rule.
-
-**In season**, academy and matches are Friday and Saturday: set `is_optional`
-on weekdays 4 and 5 and cut their targets back, so those two carry no required
-work and skipping them never breaks the streak.
+`deck_data.py` holds the cards. `TestDeckContent` in `test_deck.py` asserts
+what it can: two or three sentences a card, no wall and no other person (the
+rebounder does a wall's job), kit flags that agree with the text, and timed
+cards of 30 or 60 seconds. The rest of the brief is kept by hand: both feet,
+weak foot first on per-foot cards; no ballless sprints; instructions written
+for Will to read himself - second person, present tense, no jargon - with one
+cue about the result. Ball mastery and first touch are the priority:
+technique over fitness.
 
 ## Design rules
 
 Built for a 9-year-old on a phone, outdoors:
 
 - Large tap targets (64px minimum), high contrast, minimal text.
-- **No dropdowns and no typing anywhere except the PIN pad** on Will's screens.
-- **Nothing counts down at him, and no drill shows a length.** The one clock in
-  the app counts up and he decides when it stops. `Drill.target_label` is for
-  the rep drills and the coach screens only - `TestDrillAndLibrary` guards it
-  on Today, All drills and the drill page. The minutes stay in the data because
-  the plan is balanced on them.
-  Coach screens may use ordinary form controls.
-- **Timed cards are the one exception to "nothing counts down at him."**
-  Agreed by Phil, 3 Oct 2026. On a deck card with `timer_seconds` ("how many
-  in 30 seconds") he taps Start himself, a bar fills with no numbers, and it
-  buzzes and says "Stop!" at the end. The limit is the game and he chose to
-  start it, which is not what the rule was written against. No digits
-  counting down, anywhere - not in the text, not in `aria-valuenow` or
-  `aria-valuetext`. `TestDeckScript` reads `runTimedBar` in `deck.js` to
+- **No dropdowns and no typing anywhere except the PIN pad** on Will's
+  screens. Scores are entered with the stepper (-5, -1, +1, +5). Coach
+  screens may use ordinary form controls.
+- **Nothing counts down at him** - with one exception. On a card with
+  `timer_seconds` ("how many in 30 seconds") he taps Start himself, a bar
+  fills with no numbers, and it buzzes and says "Stop!" at the end. Agreed
+  by Phil, 3 Oct 2026: the limit is the game and he chose to start it. No
+  digits counting down, anywhere - not in the text, not in `aria-valuenow`
+  or `aria-valuetext`. `TestDeckScript` reads `runTimedBar` in `deck.js` to
   guard it. Time-scored cards use a stopwatch that counts up and he stops.
-- Palette is white, grey and blue. Contrast ratios were measured, not eyeballed:
-  body text ≥5:1, accent `#1667c9` at 5.5:1 on white. Keep it that way — he
-  reads this in bright sun.
-- Skill colours are validated for colour-blind separation, and **nothing is
-  identified by colour alone** — every coloured dot sits beside a written label.
-- The Progress chart is one measure across seven named categories, so it uses
-  **one colour, not seven**. Do not rainbow it.
+- Palette is white, grey and blue. Contrast ratios were measured, not
+  eyeballed: body text ≥5:1, accent `#1667c9` at 5.5:1 on white. Keep it that
+  way — he reads this in bright sun.
+- **Nothing is identified by colour alone.** Medals are a word and stars, the
+  lit tab has a bar and heavier type, and every coloured dot sits beside a
+  written label. Skill colours are validated for colour-blind separation.
+- The chart on Before the cards is one measure across seven named
+  categories, so it uses **one colour, not seven**. Do not rainbow it.
 - **Anything that scrolls sideways must be a shortcut, never the only door.**
-  The drill filter strip on All drills scrolls horizontally, which a nine-year-old
-  will not go hunting for; it is only allowed because that list is also grouped
-  under skill headings, so every skill is reachable by scrolling down. Do not
-  remove the headings and keep the strip.
+- **Rewards are badges and medals, never real-world prizes, and nothing
+  rewards hours or days in a row on their own** - pressure is the main reason
+  children drop out.
 - Bold and sporty, not cutesy.
 
 ## Offline
 
 The service worker is served from `/sw.js` (root scope, rendered by Django so
-the precache list matches the real drills). Ticks made offline queue in
-`localStorage` and replay when signal returns. The service worker only stores a
-clean same-origin 200 — caching the login redirect would strand him on a login
-screen he cannot get past with no signal.
+the precache list is built in `_precache_urls`). It precaches the deck at
+`/`, `deck.js`, `app.js`, Before the cards, the offline page, the manifest
+and the icons. It only stores a clean same-origin 200 (`keep()`) - caching the
+login redirect would strand him on a login screen he cannot get past with no
+signal, and `cache.add` would follow a redirect and store the login page
+under `/`.
 
 Service workers only register over **HTTPS or on localhost**. On a plain-http
-LAN address the app works but caches nothing. On Render it is HTTPS, so offline
-works there.
+LAN address the app works but caches nothing. On Render it is HTTPS, so
+offline works there.
 
-The deck at `/`, `deck.js`, `app.js`, Before the cards and the offline page
-are precached (see
-`_precache_urls`). Install-time precaching keeps only what passes `keep()`:
-`cache.add` follows a redirect and would store the login page under `/`.
-
-Bump `CACHE` in `training/templates/training/sw.js` when static assets change —
-filenames are not content-hashed.
+Bump `CACHE` in `training/templates/training/sw.js` when static assets change
+— filenames are not content-hashed. `test_switch_over.py` holds the current
+name.
 
 ## Installing to a home screen
 
@@ -483,18 +303,19 @@ that matter:
 - **iOS ignores the manifest.** It only reads `apple-touch-icon` and
   `apple-mobile-web-app-title`, so both stay in `base.html`.
 - **There is no in-app install button, on purpose.** Adding to the home screen
-  is a once-ever job for Phil, done from Safari's Share sheet or Chrome's menu,
-  so it does not earn space in Will's top bar. The `beforeinstallprompt`
-  handler and its chip were removed; do not put them back.
+  is a once-ever job for Phil, done from Safari's Share sheet or Chrome's menu.
 
 ## Deployment
 
-Render, via `render.yaml` + `build.sh`. SQLite lives on a **persistent disk** at
-`/var/data`; without it Render wipes the database on every deploy and Will loses
-his streak. The disk is mounted only at runtime, so `migrate` and
-`seed_drills` run from `startCommand`, not `build.sh` - during the build
-`/var/data` does not exist and sqlite fails with "unable to open database
-file". Regenerate `requirements.txt` from the lock after changing deps:
+Render, via `render.yaml` + `build.sh`, deploying `main` - merging is
+deploying. SQLite lives on a **persistent disk** at `/var/data`; without it
+Render wipes the database on every deploy and Will loses his history. The disk
+is mounted only at runtime, so `migrate` and `seed_drills` run from
+`startCommand`, not `build.sh` - during the build `/var/data` does not exist
+and sqlite fails with "unable to open database file". `seed_drills` writes to
+his database on every start (skills, inactive drills, badges, cards, profile),
+always by `update_or_create`, never by delete. Regenerate `requirements.txt`
+from the lock after changing deps:
 
 ```bash
 uv export --no-dev --no-hashes --no-emit-project -o requirements.txt
@@ -505,26 +326,30 @@ Production settings refuse to start without `WILL_SECRET_KEY` and `WILL_HOSTS`
 login throttle keeps counters in local memory.
 
 **Back the disk up before any deploy that carries a migration.** The file at
-`/var/data/db.sqlite3` is the only copy of his history. From the Render shell,
-before triggering the deploy:
+`/var/data/db.sqlite3` is the only copy of his history. From the Render shell
+(paste one line at a time):
 
 ```bash
-python -c "import sqlite3,datetime; s=sqlite3.connect('/var/data/db.sqlite3'); d=sqlite3.connect('/var/data/db-backup-%s.sqlite3'%datetime.date.today().isoformat()); s.backup(d); d.close(); s.close()"
+python -c "import sqlite3,datetime; s=sqlite3.connect('/var/data/db.sqlite3'); d=sqlite3.connect('/var/data/db-backup-%s.sqlite3'%datetime.datetime.now().strftime('%Y-%m-%d-%H%M')); s.backup(d); d.close(); s.close()"
+ls -l /var/data
 ```
 
-That is SQLite's online backup API - safe while gunicorn is serving, no lock
+The time is in the name so a second deploy on the same day never overwrites
+the first backup. That is SQLite's online backup API - safe while gunicorn is serving, no lock
 held, and it does not need the `sqlite3` CLI, which is not on the image. Check
 it is real rather than a zero-byte file, and write down the row counts for
-`training_sessionlog`, `training_sessionclock` and `training_earnedbadge` so
-you have something to compare against afterwards. The backup lands on the same
-disk, so it survives a bad migration but not a lost disk; pull it off the box
-if you want a real one.
+`training_sessionlog`, `training_sessionclock`, `training_earnedbadge` and
+`training_play` so you have something to compare against afterwards. The
+backup lands on the same disk, so it survives a bad migration but not a lost
+disk; pull it off the box if you want a real one.
 
 Worth knowing: `startCommand` is `migrate && seed_drills && gunicorn`, so a
 migration that fails takes the app down rather than serving a half-migrated
 database. That is the right failure, but it is a failure - check
 `PRAGMA foreign_key_check` comes back clean before deploying a migration that
-rebuilds a table.
+rebuilds a table. On SQLite an `AddField` rebuilds the table (`CREATE new /
+INSERT SELECT / DROP / RENAME`), safe only because Django wraps it in
+`PRAGMA foreign_keys = OFF`.
 
 ## Before finishing any change
 

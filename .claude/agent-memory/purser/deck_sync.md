@@ -66,3 +66,13 @@ deletes v24 (drill pages, Today) - caches only, never localStorage.
 RETIRED_BADGES = streak-3/7/30/100, perfect-week, minutes-500 (all six codes
 verified in BADGES). `best_scores` now reads retired drills; only reader is
 `before_cards`. No test asserts every RETIRED_BADGES code names a real badge.
+
+**Leg 3d (reviewed 2026-10-04):** tick endpoints (`/drill/<slug>/done|undo/`,
+`/session/time/`) removed; app.js no longer flushes; `will-training-queue`,
+`-pending`, `-clock` left on the phone unread. A stale v25 app.js POSTing to
+the removed URL gets 404 -> `!res.ok` -> entry kept (unresolved URL 404s before
+login_required/CSRF). Under 3c a replay with an expired session followed the
+302 to a 200 login page and DROPPED the entry; a replay carrying a pre-sign-in
+CSRF token 403s and is kept but never lands. Nothing now writes
+SessionLog/SessionClock except coach_log_edit (actual_reps) and the admin
+(reps/minutes/rating), so the head start and kept badges from ticks are fixed.

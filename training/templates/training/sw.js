@@ -9,7 +9,7 @@
 // Bump this whenever the CSS, JS or icon change - filenames are not
 // content-hashed, and static assets are served cache-first, so an old cache
 // would keep serving the previous stylesheet forever.
-const CACHE = 'will-training-v25';
+const CACHE = 'will-training-v26';
 
 // Built by the view as JSON. A {% templatetag openblock %} for {% templatetag closeblock %} loop with escapejs works too, but
 // escapejs writes every hyphen as a unicode escape, and a precache list you
@@ -53,8 +53,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
-  // Never cache anything that changes state - ticks must reach the server,
-  // and the app's own queue handles them when they cannot.
+  // Never cache anything that changes state. Plays go to /api/, which
+  // deck.js keeps on the phone and resends itself.
   if (request.method !== 'GET') { return; }
 
   const url = new URL(request.url);
@@ -82,7 +82,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for pages, so he sees today's real state when there is
+  // Network-first for pages, so he sees the current page when there is
   // signal, and the last known good copy when there is not.
   event.respondWith(
     fetch(request)

@@ -93,3 +93,13 @@ cascade SessionLog/SessionClock/EarnedBadge until his first real card.
 deletes a Play or an EarnedBadge any more (grepped `.delete(` outside tests:
 only `drill_uncomplete` SessionLog, coach PlanDrill, and the DEBUG-only
 `--reset`). Admin still allows SessionLog delete and stock User delete.
+
+**After leg 3d (2026-10-04):** `seed_drills --reset` no longer exists (argparse
+rejects it), `_seed_plan` is gone, plan admins unregistered - nothing in code
+writes or deletes TrainingPlan/PlanDay/PlanDrill. `SessionLogAdmin` now has
+`NoDeleteMixin`, no add, readonly athlete/date/drill/completed (actual_minutes,
+actual_reps, rating still editable). `drill_uncomplete` deleted. Grep of
+`.delete(` outside tests: none left in app code. Remaining cascade exposure:
+the stock auth User admin delete (SessionLog/SessionClock/EarnedBadge
+CASCADE, shielded only while he has a Play). No test asserts the
+SessionLogAdmin guards (test_admin.py: Skill/Drill only).

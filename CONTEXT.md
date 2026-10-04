@@ -37,11 +37,11 @@ The deck words come from `docs/chart/deck.md`.
 - **Card-day** - one card played on one day, however many times. What a play counts as toward a kept badge, the same as one tick.
 - **Sync** - the phone sending plays it has not sent yet to `/api/plays/`, and downloading them back if it has lost its copy.
 
-## The existing app
+## Before the cards (the old app, retired in leg 3d)
 
-- **Drill** - one item of the fixed plan. Minutes XOR reps.
-- **Plan / plan day** - the fixed fortnight of six-drill days, week A and week B.
-- **Tick** - marking a drill done on Today. A `SessionLog` row.
-- **Session clock** - the one count-up clock on Today. `SessionClock`.
-- **Streak** - required plan days in a row. Replaced by weeks-in-a-row at the switch-over; only his best streak survives, on Before the cards.
+- **Drill** - one item of the old fixed plan. Minutes XOR reps. All inactive now; kept because his ticks point at them.
+- **Plan / plan day** - the old fixed fortnight of six-drill days, week A and week B. Rows kept, never read.
+- **Tick** - marking a drill done on the old Today screen. A `SessionLog` row. Nothing makes one any more.
+- **Session clock** - the old count-up clock on Today. `SessionClock`. Still decides what a clocked day was worth.
+- **Streak** - required plan days in a row (Monday to Saturday; Sunday rest). Only his best streak survives, on Before the cards.
 - **Retired** - `is_active=False`; the row and every score pointing at it stay.

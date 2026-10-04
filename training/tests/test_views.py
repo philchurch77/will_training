@@ -12,11 +12,8 @@ from training.models import Skill
 
 pytestmark = pytest.mark.django_db
 
-CHILD_URLS = ["training:today", "training:before_cards", "training:library", "training:deck"]
+CHILD_URLS = ["training:before_cards", "training:deck"]
 COACH_URLS = [
-    "training:coach_plan",
-    "training:coach_drills",
-    "training:coach_drill_new",
     "training:coach_logs",
 ]
 
@@ -97,202 +94,11 @@ class TestCoachAccess:
         assert client.get(reverse(name)).status_code == 200
 
     def test_the_coach_screens_are_not_in_the_tab_bar(self, client, will, seeded):
-        """Will should not be invited to rewrite his own training plan."""
+        """Will should not be invited onto Dad's screen from his tab bar."""
         client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
+        body = client.get(reverse("training:deck")).content.decode()
         tabbar = body.split('class="tabbar"')[1].split("</nav>")[0]
-        assert reverse("training:coach_plan") not in tabbar
-
-
-class TestTodayScreen:
-    def test_shows_the_drills_for_the_right_weekday(self, client, will, seeded):
-        from django.utils import timezone
-
-        from training.models import TrainingPlan
-
-        client.force_login(will)
-        response = client.get(reverse("training:today"))
-        assert response.status_code == 200
-
-        # The day runs two alternating sessions, so this has to ask for the
-        # one the fortnight is actually on.
-        from training import progress
-
-        plan = TrainingPlan.get_active()
-        day = timezone.localdate()
-        today = plan.days.get(weekday=day.weekday())
-        body = response.content.decode()
-        for drill in today.drills_for_week(progress.week_of(day)):
-            assert drill.name in body
-
-    def test_today_carries_the_session_clock(self, client, will, plan):
-        client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
-        assert 'id="session"' in body
-        assert 'id="clockstart"' in body
-
-    def test_a_drill_can_be_ticked_off_without_opening_it(self, client, will, plan, drill):
-        # The tick is the whole job on a normal day; the drill page is for
-        # reading the instructions. One tap, no page to come back from.
-        from training.models import SessionLog
-
-        client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
-        assert reverse("training:drill_complete", args=[drill.slug]) in body
-
-        client.post(
-            reverse("training:drill_complete", args=[drill.slug]),
-            {"session_seconds": "600"},
-        )
-        assert SessionLog.objects.filter(athlete=will, drill=drill).exists()
-
-    def test_the_rows_only_show_kit_he_has_to_fetch(self, client, will, seeded):
-        """Every drill needs a ball, so the ball tells him nothing. The wall,
-        the cones and the space are what differ between one drill and the next.
-        The drill page still lists the lot, labels and all."""
-        from training.models import Drill, PlanDay, PlanDrill
-
-        walled = Drill.objects.filter(needs_wall=True, needs_ball=True).first()
-        PlanDay.objects.update(is_rest=False, is_optional=False)
-        for day in PlanDay.objects.all():
-            day.items.all().delete()
-            PlanDrill.objects.create(plan_day=day, drill=walled, order=1)
-
-        client.force_login(will)
-        row = client.get(reverse("training:today")).content.decode()
-        assert "\U0001f9f1" in row       # the wall is worth saying
-        assert "\u26bd" not in row       # the ball is not
-
-        page = client.get(
-            reverse("training:drill", args=[walled.slug])
-        ).content.decode()
-        assert "\u26bd" in page          # but the kit list still has it
-
-    def test_a_rest_day_says_so(self, client, will, plan):
-        """Force the plan so every day is a rest day, then check the wording."""
-        from training.models import PlanDay
-
-        PlanDay.objects.update(is_rest=True)
-        client.force_login(will)
-        response = client.get(reverse("training:today"))
-        assert "Rest day" in response.content.decode()
-
-    def test_an_optional_day_is_marked_as_a_bonus(self, client, will, plan):
-        from training.models import PlanDay
-
-        PlanDay.objects.update(is_rest=False, is_optional=True)
-        client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
-        assert "Bonus session" in body
-
-    def test_a_completed_drill_shows_as_done(self, client, will, plan, drill):
-        """Force every day to a plain session carrying the drill, the same way
-        the two tests above force rest and bonus. Without it this depends on
-        the day the suite happens to run: the fixture's Sunday is a rest day
-        with no drills on it, so it passed six days a week and failed on the
-        seventh."""
-        from training.models import PlanDay, PlanDrill
-
-        PlanDay.objects.update(is_rest=False, is_optional=False)
-        for day in PlanDay.objects.all():
-            PlanDrill.objects.get_or_create(
-                plan_day=day, drill=drill, defaults={"order": 1}
-            )
-
-        client.force_login(will)
-        client.post(reverse("training:drill_complete", args=[drill.slug]))
-        body = client.get(reverse("training:today")).content.decode()
-        assert "is-done" in body
-
-
-class TestDrillAndLibrary:
-    def test_a_drill_page_shows_its_cue_and_instructions(self, client, will, drill):
-        client.force_login(will)
-        body = client.get(reverse("training:drill", args=[drill.slug])).content.decode()
-        assert drill.cue in body
-        assert "Tap the ball." in body
-
-    def test_a_timed_drill_has_no_countdown(self, client, will, drill):
-        """The clock moved up to the session. A drill he is enjoying should not
-        have a number ticking down at him telling him to stop."""
-        client.force_login(will)
-        body = client.get(reverse("training:drill", args=[drill.slug])).content.decode()
-        assert 'id="clock"' not in body
-        assert "no timer on this one" in body
-
-    def test_the_session_clock_is_reachable_from_inside_a_drill(
-        self, client, will, drill
-    ):
-        # The chip in the top bar is the only clock he can see once he has
-        # tapped into a drill, and it is on every screen for that reason.
-        client.force_login(will)
-        body = client.get(reverse("training:drill", args=[drill.slug])).content.decode()
-        assert 'id="clockchip"' in body
-
-    def test_no_length_is_ever_shown_on_his_screens(self, client, will, seeded):
-        """The drills still have lengths - the plan is balanced on them - but he
-        never sees one. A number on a drill reads as permission to stop, and
-        that is what he was doing. Coach screens still show them."""
-        from training.models import Drill
-
-        timed = Drill.objects.filter(duration_minutes__isnull=False).first()
-        client.force_login(will)
-
-        for url in (
-            reverse("training:today"),
-            reverse("training:library"),
-            reverse("training:drill", args=[timed.slug]),
-        ):
-            body = client.get(url).content.decode()
-            assert timed.target_label not in body, url
-            assert f"{timed.duration_minutes} minutes" not in body, url
-
-    def test_the_coach_still_sees_drill_lengths(self, client, will, seeded):
-        # Phil needs them: they are how a day is kept to thirty minutes.
-        from training.models import Drill
-
-        timed = Drill.objects.filter(duration_minutes__isnull=False).first()
-        client.force_login(will)
-        body = client.get(reverse("training:coach_drills")).content.decode()
-        assert timed.target_label in body
-
-    def test_a_rep_drill_gets_a_counter(self, client, will, rep_drill):
-        client.force_login(will)
-        body = client.get(
-            reverse("training:drill", args=[rep_drill.slug])
-        ).content.decode()
-        assert 'id="count"' in body
-
-    def test_the_library_can_be_filtered_by_skill(self, client, will, seeded):
-        client.force_login(will)
-        response = client.get(reverse("training:library_skill", args=["shooting"]))
-        assert response.status_code == 200
-        names = {d.name for d in response.context["drills"]}
-        assert "Pick your corner" in names
-        assert "Toe taps" not in names  # that one is ball mastery
-
-    def test_the_unfiltered_library_groups_drills_under_skill_headings(
-        self, client, will, seeded
-    ):
-        # The headings are what make the filter strip optional: every skill is
-        # reachable by scrolling, so nothing is lost if he never swipes it.
-        client.force_login(will)
-        body = client.get(reverse("training:library")).content.decode()
-        for skill in Skill.objects.all():
-            assert skill.name in body
-        assert body.count('class="drill-group"') == Skill.objects.count()
-
-    def test_a_filtered_library_drops_the_headings(self, client, will, seeded):
-        # The lit chip already names the skill; a heading would repeat it.
-        client.force_login(will)
-        body = client.get(
-            reverse("training:library_skill", args=["shooting"])
-        ).content.decode()
-        assert 'class="drill-group"' not in body
-
-    def test_a_missing_drill_is_a_404(self, client, will):
-        client.force_login(will)
-        assert client.get(reverse("training:drill", args=["nope"])).status_code == 404
+        assert reverse("training:coach_logs") not in tabbar
 
 
 class TestBeforeTheCards:
@@ -321,118 +127,6 @@ class TestBeforeTheCards:
         response = client.get(reverse("training:before_cards"))
         assert "streak" not in response.context
         assert b"flame" not in response.content
-
-
-class TestCoachEditing:
-    """Dad edits the plan through the same signed-in session."""
-
-    def test_the_coach_can_reorder_a_day(self, client, will, seeded):
-        from training.models import PlanDay, PlanDrill
-
-        client.force_login(will)
-        day = PlanDay.objects.get(weekday=0)
-        items = list(day.items.filter(week=PlanDrill.WEEK_A).order_by("order"))
-        second = items[1]
-
-        client.post(
-            reverse("training:coach_plan_day", args=[0]),
-            {"action": "up", "item": second.pk, "week": "A"},
-        )
-        moved = list(day.items.filter(week=PlanDrill.WEEK_A).order_by("order"))
-        assert moved[0].pk == second.pk
-
-    def test_reordering_one_week_leaves_the_other_alone(self, client, will, seeded):
-        """The two halves of the fortnight each number their drills from one.
-        Reordering across both would interleave them."""
-        from training.models import PlanDay, PlanDrill
-
-        client.force_login(will)
-        day = PlanDay.objects.get(weekday=0)
-        before = [
-            i.pk for i in day.items.filter(week=PlanDrill.WEEK_B).order_by("order")
-        ]
-        second_a = list(day.items.filter(week=PlanDrill.WEEK_A).order_by("order"))[1]
-
-        client.post(
-            reverse("training:coach_plan_day", args=[0]),
-            {"action": "up", "item": second_a.pk, "week": "A"},
-        )
-        after = [
-            i.pk for i in day.items.filter(week=PlanDrill.WEEK_B).order_by("order")
-        ]
-        assert after == before
-
-    def test_a_drill_added_lands_in_the_week_on_screen(self, client, will, seeded):
-        from training.models import Drill, PlanDay, PlanDrill
-
-        client.force_login(will)
-        day = PlanDay.objects.get(weekday=0)
-        drill = Drill.objects.get(slug="cruyff-turn")
-
-        client.post(
-            reverse("training:coach_plan_day", args=[0]),
-            {"action": "add", "drill": drill.pk, "week": "B"},
-        )
-        assert day.items.filter(drill=drill, week=PlanDrill.WEEK_B).exists()
-        assert not day.items.filter(drill=drill, week=PlanDrill.WEEK_A).exists()
-
-    def test_the_coach_can_remove_a_drill_from_a_day(self, client, will, seeded):
-        from training.models import PlanDay
-
-        client.force_login(will)
-        day = PlanDay.objects.get(weekday=0)
-        before = day.items.count()
-        client.post(
-            reverse("training:coach_plan_day", args=[0]),
-            {"action": "remove", "item": day.items.first().pk},
-        )
-        assert day.items.count() == before - 1
-
-    def test_the_coach_can_add_a_drill_to_a_day(self, client, will, seeded):
-        from training.models import Drill, PlanDay
-
-        client.force_login(will)
-        day = PlanDay.objects.get(weekday=0)
-        before = day.items.count()
-        extra = Drill.objects.get(slug="cone-slalom")
-        client.post(
-            reverse("training:coach_plan_day", args=[0]),
-            {"action": "add", "drill": extra.pk},
-        )
-        assert day.items.count() == before + 1
-
-    def test_the_coach_can_turn_a_day_into_a_rest_day(self, client, will, seeded):
-        from training.models import PlanDay
-
-        client.force_login(will)
-        client.post(
-            reverse("training:coach_plan_day", args=[0]),
-            {
-                "action": "settings",
-                "label": "Rest",
-                "target_minutes": "0",
-                "is_rest": "on",
-            },
-        )
-        assert PlanDay.objects.get(weekday=0).is_rest
-
-    def test_a_drill_needs_minutes_or_reps_but_not_both(self, client, will, seeded):
-        client.force_login(will)
-        response = client.post(
-            reverse("training:coach_drill_new"),
-            {
-                "name": "Bad drill",
-                "slug": "bad-drill",
-                "skill": Skill.objects.first().pk,
-                "instructions": "Do a thing.",
-                "cue": "Cue",
-                "duration_minutes": "5",
-                "target_reps": "20",
-                "difficulty": "1",
-            },
-        )
-        assert response.status_code == 200
-        assert "one or the other" in response.content.decode()
 
 
 class TestPwaEndpoints:
@@ -476,13 +170,13 @@ class TestPwaEndpoints:
         # the app's own top bar in standalone mode.
         theme = client.get("/manifest.json").json()["theme_color"]
         client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
+        body = client.get(reverse("training:deck")).content.decode()
         assert f'<meta name="theme-color" content="{theme}">' in body
 
     def test_ios_gets_its_own_icon_and_title(self, client, will, seeded):
         # iOS ignores the manifest entirely.
         client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
+        body = client.get(reverse("training:deck")).content.decode()
         assert 'rel="apple-touch-icon"' in body
         assert 'name="apple-mobile-web-app-title"' in body
         assert finders.find("training/img/apple-touch-icon.png")
@@ -500,7 +194,7 @@ class TestPwaEndpoints:
         # Adding to the home screen is the browser's job (Safari's Share
         # sheet, Chrome's menu). The top bar stays for Will's app only.
         client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
+        body = client.get(reverse("training:deck")).content.decode()
         assert "install-go" not in body
         # The Safari route still has to work, so the icon tag stays.
         assert "apple-touch-icon" in body
@@ -541,194 +235,18 @@ class TestTemplateComments:
                     assert "#}" in line, f"{path}:{number} opens {{# and never closes it"
 
 
-class TestSessionClockScript:
-    """A source-text test, because there is no JavaScript runner in this project.
-
-    The session clock lives in localStorage and only ever reaches the server
-    as a single number, so a double count inside session.js looks like an
-    ordinary long session to every other test in this suite. There is no node
-    on this machine and a JS test runner would mean a build step, which this
-    app deliberately does not have - so the guard reads the file and asserts
-    the shape of the fix, the way TestTemplateComments reads the templates.
-
-    The bug it guards: read() compared the server's banked seconds against
-    `state.accumulated` - the PAUSED total, which is stale by the whole
-    running portion while the clock is going - and adopted them without
-    rebasing `state.startedAt`. Every drill tick posts the elapsed seconds and
-    redirects back to Today, so on the next load the running portion was
-    counted once inside the banked figure and again by elapsed(). The clock
-    jumped by the whole session-so-far on every tick, and the inflated number
-    was banked straight back to the server: a real 30 minute session, ticked
-    every five minutes, arrived as 105 minutes.
-    """
-
-    def source(self):
-        from pathlib import Path
-
-        return Path("training/static/training/js/session.js").read_text(
-            encoding="utf-8"
-        )
-
-    def test_the_banked_value_is_compared_against_the_running_total(self):
-        # `state.accumulated` alone is the paused total. Comparing the
-        # server's figure against it while the clock runs makes this phone's
-        # own seconds, posted a moment ago, look like news from elsewhere -
-        # and adopting them is the double count.
-        import re
-
-        compact = re.sub(r"\s+", " ", self.source())
-        assert "banked > state.accumulated" not in compact, (
-            "session.js compares the server's banked seconds against the "
-            "paused total again. It must be compared against "
-            "state.accumulated + running(state), or every drill tick adds the "
-            "session so far a second time."
-        )
-        assert "running(state)" in compact, (
-            "the running(state) helper has gone - read() has nothing to add "
-            "the live portion of the clock with"
-        )
-
-    def test_adopting_a_banked_value_rebases_the_start_timestamp(self):
-        # The banked figure already contains the running portion, so leaving
-        # startedAt where it was makes elapsed() count those minutes twice.
-        import re
-
-        compact = re.sub(r"\s+", " ", self.source())
-        marker = "state.accumulated = banked;"
-        assert marker in compact, "read() no longer adopts the server's figure at all"
-        branch = compact[compact.index(marker):][:220]
-        assert "state.startedAt = Date.now()" in branch, (
-            "read() adopts the server's banked seconds without resetting "
-            "state.startedAt. The banked figure already includes the time "
-            "since the clock was started, so elapsed() will count it twice - "
-            "this is the bug that turned 30 minutes into 105."
-        )
-
-    def test_elapsed_still_clamps_to_the_maximum(self):
-        # The last line of defence: whatever the arithmetic does, a phone left
-        # running on the kitchen table never reports a nine hour session.
-        import re
-
-        compact = re.sub(r"\s+", " ", self.source())
-        assert "Math.min(MAX," in compact, (
-            "elapsed() no longer clamps to MAX - a forgotten clock can bank "
-            "an absurd session"
-        )
-
-
 class TestChrome:
     def test_the_coach_link_is_offered_on_will_screens(self, client, will, seeded):
         client.force_login(will)
-        body = client.get(reverse("training:today")).content.decode()
-        assert reverse("training:coach_plan") in body
+        body = client.get(reverse("training:deck")).content.decode()
+        assert reverse("training:coach_logs") in body
 
     def test_but_not_repeated_on_the_coach_screens_themselves(
         self, client, will, seeded
     ):
         client.force_login(will)
-        body = client.get(reverse("training:coach_plan")).content.decode()
+        body = client.get(reverse("training:coach_logs")).content.decode()
         header = body.split("</header>")[0]
-        assert reverse("training:coach_plan") not in header
+        assert reverse("training:coach_logs") not in header
 
 
-class TestARetiredDrillIsStillReachable:
-    """Retiring a drill sets is_active=False. Neither `drill_complete` nor
-    `drill_detail` filters on it, deliberately.
-
-    The scenario is real: he trains on the morning of a deploy with no signal,
-    the tick sits in localStorage, the deploy retires the drill, signal
-    returns and the queue replays against a slug that is no longer active.
-    A later tidy adding `.active()` to either view would throw that tick away
-    with a 404 that nothing in the app surfaces.
-    """
-
-    # Catches an is_active filter being added to drill_complete, which would
-    # 404 a tick queued offline before the deploy that retired the drill.
-    def test_a_tick_queued_offline_lands_against_a_drill_retired_by_the_deploy(
-        self, client, will, plan, drill
-    ):
-        from training.models import Drill, SessionLog
-
-        # Yesterday, not a pinned date: the queue's date is only honoured
-        # within the last fortnight (see _parse_date), which is the window a
-        # phone can realistically have been offline for.
-        yesterday = timezone.localdate() - timedelta(days=1)
-
-        # He trained yesterday with no signal. The deploy then retires it.
-        Drill.objects.filter(pk=drill.pk).update(is_active=False)
-
-        client.force_login(will)
-        response = client.post(
-            reverse("training:drill_complete", args=[drill.slug]),
-            {"date": yesterday.isoformat(), "session_seconds": "1800"},
-        )
-        assert response.status_code == 302, (
-            "the replayed tick was rejected - has drill_complete started "
-            "filtering on is_active?"
-        )
-
-        log = SessionLog.objects.get(athlete=will, date=yesterday, drill=drill)
-        assert log.completed is True
-
-    # Catches the unique constraint on (athlete, date, drill) being relaxed -
-    # the offline queue replays a tick that may already have landed, and a
-    # second row would double the day.
-    def test_replaying_the_same_queued_tick_twice_leaves_one_row(
-        self, client, will, plan, drill
-    ):
-        from training.models import Drill, SessionLog
-
-        yesterday = timezone.localdate() - timedelta(days=1)
-
-        Drill.objects.filter(pk=drill.pk).update(is_active=False)
-        client.force_login(will)
-
-        body = {"date": yesterday.isoformat(), "session_seconds": "1800"}
-        client.post(reverse("training:drill_complete", args=[drill.slug]), body)
-        client.post(reverse("training:drill_complete", args=[drill.slug]), body)
-
-        assert (
-            SessionLog.objects.filter(
-                athlete=will, date=yesterday, drill=drill
-            ).count()
-            == 1
-        )
-
-    # Catches a replayed tick blanking the count he entered on the drill page
-    # before he lost signal. drill_complete writes only what the request
-    # carried, and the row it lands on may belong to a retired drill.
-    def test_a_replayed_tick_does_not_wipe_a_count_on_a_retired_drill(
-        self, client, will, plan, rep_drill
-    ):
-        from training.models import Drill, SessionLog
-
-        yesterday = timezone.localdate() - timedelta(days=1)
-
-        SessionLog.objects.create(
-            athlete=will, date=yesterday, drill=rep_drill,
-            completed=True, actual_reps=42,
-        )
-        Drill.objects.filter(pk=rep_drill.pk).update(is_active=False)
-
-        client.force_login(will)
-        client.post(
-            reverse("training:drill_complete", args=[rep_drill.slug]),
-            {"date": yesterday.isoformat(), "session_seconds": "1800"},
-        )
-
-        log = SessionLog.objects.get(athlete=will, date=yesterday, drill=rep_drill)
-        assert log.actual_reps == 42
-
-    # Catches an is_active filter on drill_detail, which would 404 a bookmark
-    # or a precached page - on a phone with no signal, with no way back.
-    def test_a_retired_drills_page_still_renders(self, client, will, drill):
-        from training.models import Drill
-
-        Drill.objects.filter(pk=drill.pk).update(is_active=False)
-
-        client.force_login(will)
-        response = client.get(reverse("training:drill", args=[drill.slug]))
-        assert response.status_code == 200
-        body = response.content.decode()
-        assert "Tap the ball." in body
-        assert drill.cue in body
